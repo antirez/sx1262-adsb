@@ -20,7 +20,9 @@ static int nibble(char c) {
     return -1;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    bool busy = argc==2 && !strcmp(argv[1],"--busy");
+    if (argc!=1 && !busy) { fputs("usage: replay [--busy]\n",stderr); return 2; }
     char line[768], hex[513], extra;
     Capture c = {0};
     if (!decoder_init(show) || !decoder_self_test()) return 1;
@@ -38,7 +40,7 @@ int main(void) {
             if (hi < 0 || lo < 0) return 1;
             c.raw[i] = 16*hi+lo;
         }
-        decoder_capture(&c);
+        if (!busy || decoder_candidate(&c)) decoder_capture(&c);
         while (decoder_idle(c.last_ms+40)) {}
     }
     return ferror(stdin) || ferror(stdout);

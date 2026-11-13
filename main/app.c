@@ -24,10 +24,12 @@
 #include <string.h>
 #include <unistd.h>
 
-enum { QUEUE_DEPTH=96, BOOT_BUTTON=0 };
+enum { QUEUE_DEPTH=96, UNCHECKED=8, BOOT_BUTTON=0 };
+/* Advances only when both the fresh queue and the deferred passes are idle. */
+static atomic_uint idle_polls;
 static QueueHandle_t captures, results;
 static uint32_t boot_id;
-static atomic_uint bursts, polls, restarts, full_queue, high_water, max_rearm_us, deferred;
+static atomic_uint bursts, polls, restarts, full_queue, high_water, max_rearm_us, deferred, filtered;
 static atomic_bool ready;
 static int64_t now_ms(void) { return esp_timer_get_time()/1000; }
 
@@ -123,25 +125,36 @@ static esp_err_t listen(void) {
 
         err=sample_scope(c.dial_hz,now,state==SCAN_COMPLETE ? &c : NULL);
         if (err!=ESP_OK) return err;
-        if (state==SCAN_COMPLETE) {
-            if (uxQueueSpacesAvailable(captures)==0) atomic_fetch_add(&full_queue,1);
-            xQueueSend(captures,&c,portMAX_DELAY);
-            unsigned depth=uxQueueMessagesWaiting(captures);
-            if (depth>atomic_load(&high_water)) atomic_store(&high_water,depth);
+        bool recalibrate=c.dial_hz!=atomic_load(&requested_hz) || now-calibrated>=60000;
+        /* Start the next capture before spending time on this one. At a
+         * frequency change preserve the old capture's dial and floor until
+         * the queue has copied them. */
+        if (state==SCAN_COMPLETE && !recalibrate) {
+            if ((err=radio_arm(c.threshold))!=ESP_OK) return err;
         }
-        if (c.dial_hz!=atomic_load(&requested_hz) || now-calibrated>=60000) {
-            /* Finish an armed window before touching the synthesizer. A
-             * completed one was already queued under its original frequency. */
+        int64_t rearmed=esp_timer_get_time();
+        if (state==SCAN_COMPLETE) {
+            if (uxQueueMessagesWaiting(captures)>=UNCHECKED && !decoder_candidate(&c)) {
+                atomic_fetch_add(&filtered,1);
+            } else if (xQueueSend(captures,&c,0)!=pdTRUE) {
+                atomic_fetch_add(&full_queue,1);
+            } else {
+                unsigned depth=uxQueueMessagesWaiting(captures);
+                if (depth>atomic_load(&high_water)) atomic_store(&high_water,depth);
+            }
+        }
+        if (recalibrate) {
             if (state==SCAN_ARMED && (err=radio_finish())!=ESP_OK) return err;
             err=arm_channel(&c);
-            calibrated=now_ms();
-        } else if (state==SCAN_COMPLETE) err=radio_arm(c.threshold);
-        if (err!=ESP_OK) return err;
+            if (err!=ESP_OK) return err;
+            rearmed=esp_timer_get_time();
+            calibrated=rearmed/1000;
+        }
+        last_armed=rearmed/1000;
         if (state==SCAN_COMPLETE) {
-            unsigned us=esp_timer_get_time()-detected;
+            unsigned us=rearmed-detected;
             if (us>atomic_load(&max_rearm_us)) atomic_store(&max_rearm_us,us);
         }
-        last_armed=now_ms();
     }
 }
 
@@ -175,8 +188,10 @@ static void decode_task(void *unused) {
     Capture c;
     while (true) {
         if (xQueueReceive(captures,&c,0)) decoder_capture(&c);
-        else if (!decoder_idle(now_ms()) && xQueueReceive(captures,&c,pdMS_TO_TICKS(10)))
-            decoder_capture(&c);
+        else if (!decoder_idle(now_ms())) {
+            atomic_fetch_add(&idle_polls,1);
+            if (xQueueReceive(captures,&c,pdMS_TO_TICKS(10))) decoder_capture(&c);
+        }
         atomic_store(&deferred,decoder_evictions());
         vTaskDelay(1);  /* Let this core's idle task run even in dense traffic. */
     }
@@ -274,9 +289,9 @@ static void console(bool screen_ok) {
                 if (!strcmp(key,"double")) handle_key(KEY_DOUBLE);
             }
             else if (!strcmp(line,"status"))
-                printf("SXSTATUS %08"PRIx32" ready=%u bursts=%u polls=%u queue_peak=%u queue_full=%u "
+                printf("SXSTATUS %08"PRIx32" ready=%u bursts=%u polls=%u queue_peak=%u queue_full=%u filtered=%u idle_polls=%u "
                        "rearm_max_us=%u retries=%u deferred_drops=%u log=%u oled=%u dial=%u saved=%u menu=%u scope_cols=%u scope_samples=%u rssi_code=%d peak_code=%d scope_hits=%u wave_block=%u zoom=%u\n",boot_id,atomic_load(&ready),
-                       atomic_load(&bursts),atomic_load(&polls),atomic_load(&high_water),atomic_load(&full_queue),
+                       atomic_load(&bursts),atomic_load(&polls),atomic_load(&high_water),atomic_load(&full_queue),atomic_load(&filtered),atomic_load(&idle_polls),
                        atomic_load(&max_rearm_us),atomic_load(&restarts),atomic_load(&deferred),mounted,screen_ok,atomic_load(&applied_hz),
                        (unsigned)saved_hz,menu.open,menu.open?view.columns:0,menu.open?view.samples:0,
                        menu.open?view.level:-1,menu.open?view.strongest:-1,menu.open?view.triggers:0,

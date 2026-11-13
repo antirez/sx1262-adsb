@@ -26,6 +26,10 @@ typedef struct {
 
 typedef void (*Report)(const Result *result);
 
+/* When the input queue backs up, reserve space for plausible short or long
+ * replies. Call after decoder_init. */
+bool decoder_candidate(const Capture *capture);
+
 /* One decoder owns its scratch, tracks and pending captures. Call these from
  * the same task. A second task can queue radio captures at any time. */
 bool decoder_init(Report report);

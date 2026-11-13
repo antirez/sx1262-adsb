@@ -11,8 +11,14 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Four unchecked captures preserve background samples. The remaining slots
+ * can absorb a group of replies while the single core finishes a hard one. */
+enum { QUEUE_DEPTH=32, UNCHECKED=4 };
+/* Advances only when both the fresh queue and the deferred passes are idle. */
+static atomic_uint idle_polls;
 static QueueHandle_t captures, results, pages;
 static atomic_uint requested=DEFAULT_HZ, applied, failed, bursts, polls, retries, dropped;
+static atomic_uint filtered, deferred;
 static atomic_int radio_error, decoder_ok;
 static atomic_bool ready, watching, painted;
 static Scope scope;
@@ -58,7 +64,6 @@ static int receive(void) {
             c.first_ms=last; c.last_ms=now;
             if ((err=radio_read(c.raw))) return err;
             c.block=atomic_fetch_add(&bursts,1)+1;
-            if (!xQueueSend(captures,&c,0)) atomic_fetch_add(&dropped,1);
         } else if (state!=SCAN_ARMED) return 0x103;
         if (atomic_load(&watching)) {
             uint8_t level;
@@ -67,12 +72,23 @@ static int receive(void) {
             scope_sample(&scope,c.dial_hz,now,level,state==SCAN_COMPLETE?&c:NULL);
             taskEXIT_CRITICAL();
         }
-        if (c.dial_hz!=atomic_load(&requested) || now-calibrated>=60000) {
+        bool recalibrate=c.dial_hz!=atomic_load(&requested) || now-calibrated>=60000;
+        /* On an ordinary capture the radio can start listening again while
+         * we decide what goes in the queue. On a retune, queue the old
+         * capture before arm() overwrites its frequency and noise floor. */
+        if (state==SCAN_COMPLETE && !recalibrate && (err=radio_arm(c.threshold))) return err;
+        last=uptime_ms();
+        if (state==SCAN_COMPLETE) {
+            if (uxQueueMessagesWaiting(captures)>=UNCHECKED &&
+                atomic_load(&decoder_ok)>0 && !decoder_candidate(&c))
+                atomic_fetch_add(&filtered,1);
+            else if (!xQueueSend(captures,&c,0)) atomic_fetch_add(&dropped,1);
+        }
+        if (recalibrate) {
             if (state==SCAN_ARMED && (err=radio_finish())) return err;
             if ((err=arm(&c))) return err;
-            calibrated=uptime_ms();
-        } else if (state==SCAN_COMPLETE && (err=radio_arm(c.threshold))) return err;
-        last=uptime_ms();
+            last=calibrated=uptime_ms();
+        }
     }
 }
 
@@ -102,8 +118,11 @@ static void decoder_task(void *arg) {
     Capture c;
     for (;;) {
         if (xQueueReceive(captures,&c,0)) decoder_capture(&c);
-        else if (!decoder_idle(uptime_ms()) && xQueueReceive(captures,&c,pdMS_TO_TICKS(10)))
-            decoder_capture(&c);
+        else if (!decoder_idle(uptime_ms())) {
+            atomic_fetch_add(&idle_polls,1);
+            if (xQueueReceive(captures,&c,pdMS_TO_TICKS(10))) decoder_capture(&c);
+        }
+        atomic_store(&deferred,decoder_evictions());
     }
 }
 
@@ -164,9 +183,10 @@ static void console(const Page *last_page) {
         line[used]=0; used=0;
         if (!strcmp(line,"status")) {
             char msg[320];
-            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d\n",
+            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d\n",
                 boot,(int)atomic_load(&ready),atomic_load(&decoder_ok),atomic_load(&bursts),
-                atomic_load(&polls),atomic_load(&dropped),atomic_load(&retries),atomic_load(&radio_error),
+                atomic_load(&polls),atomic_load(&dropped),atomic_load(&filtered),atomic_load(&deferred),atomic_load(&idle_polls),
+                atomic_load(&retries),atomic_load(&radio_error),
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap());
             board_print(msg);
         } else if (!strcmp(line,"dump")) { board_print(mounted && journal_dump() ? "SXEND\n" : "SXERROR reading journal\n"); }
@@ -248,7 +268,7 @@ static void field_task(void *arg) {
 void techo_start(void) {
     boot=board_random(); history_set_boot(boot);
     mounted=journal_begin(&saved); atomic_store(&requested,saved);
-    captures=xQueueCreate(16,sizeof(Capture));
+    captures=xQueueCreate(QUEUE_DEPTH,sizeof(Capture));
     results=xQueueCreate(6,sizeof(Result));
     pages=xQueueCreate(1,sizeof(Page));
     if (!captures || !results || !pages ||

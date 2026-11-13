@@ -15,6 +15,8 @@ for set_name in garden-and-bench bench-test morning techo-bench; do
     "$replay" < "$tmp/input" > "$tmp/results"
     cut -d' ' -f1,2 "$tmp/results" > "$tmp/actual"
     diff -u "$tmp/expected" "$tmp/actual"
+    "$replay" --busy < "$tmp/input" > "$tmp/filtered"
+    diff -u "$tmp/results" "$tmp/filtered"
     printf '%s: %d captures, %d packets\n' "$set_name" "$(wc -l < "$tmp/rows")" "$(wc -l < "$tmp/actual")"
 done
 

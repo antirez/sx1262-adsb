@@ -79,6 +79,47 @@ static void make_test_shape(void) {
     }
 }
 
+/* A 112-bit reply fills about twenty 6 us bins. A 56-bit reply fills ten.
+ * Count bins that carry both power and modulation: a strong narrow spike
+ * can raise the average power, and a steady carrier can have the right
+ * duration, but neither contains a train of half-microsecond pulses. */
+bool decoder_candidate(const Capture *c) {
+    enum { BIN=8, BINS=SAMPLES/BIN };
+    int level[BINS], peak=0, active=0;
+    bool changing[BINS];
+    for (int b=0; b<BINS; b++) {
+        const uint8_t *p=c->raw+b*BIN;
+        int sum=p[0], variation=0;
+        for (int i=1; i<BIN; i++) {
+            sum+=p[i];
+            variation+=abs((int)p[i]-p[i-1]);
+        }
+        level[b]=sum;
+        changing[b]=variation>=2*(BIN-1); /* One dB per step on average. */
+    }
+    int before=(level[0]+level[1])/2;
+    int after=(level[BINS-2]+level[BINS-1])/2;
+    int floor=before<after ? before : after;
+    for (int b=0; b<BINS; b++) {
+        int rise=floor-level[b];
+        if (rise>peak) peak=rise;
+    }
+    /* The relative threshold excludes the tail of a strong spike. Keep
+     * the absolute threshold low enough for a reply near the noise floor. */
+    int threshold=peak/3;
+    if (threshold<4*BIN) threshold=4*BIN;
+    for (int b=0; b<BINS; b++)
+        if (changing[b] && floor-level[b]>=threshold) active++;
+    if (active<7) return false;
+    if (active<14) {
+        int score;
+        return sx_short_gate(c->raw,SAMPLES,750000,0,SAMPLES,&score)>=0;
+    }
+    candidate_t hit[2];
+    if (sx_preambles_model(c->raw,SAMPLES,shape_data,ASSET_SIZE(shape),hit,2,4,3500)) return true;
+    return sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),hit,2,4,3500)>0;
+}
+
 /* A completed Result is always checked independently of the search that
  * proposed it. The same checks protect the host replay and the OLED. */
 static bool accept(Result *r, int rank, const char *method, int df) {

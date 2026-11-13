@@ -150,7 +150,7 @@ static int signal_y(unsigned code) {
     if (code>240) code=240;
     return 53+(int)(code-80)*80/160;
 }
-static void draw(Screen rows,CardView card,const ScopeView *v) {
+static void draw(Screen rows,CardView card,const ScopeView *v,int battery_percent,bool usb_powered,bool battery_visible) {
     panel.fillScreen(WHITE);
     panel.fillRect(0,0,200,20,BLACK);
     bool plane=card==AIRCRAFT_CARD || card==POSITION_CARD;
@@ -159,7 +159,26 @@ static void draw(Screen rows,CardView card,const ScopeView *v) {
         bool big=(plane && (y==1 || y==3)) || (card==POSITION_CARD && y==5);
         int n=strlen(rows[y]), size=big ? min(4,200/(6*n)) : 2;
         panel.setTextSize(size); panel.setTextColor(y?BLACK:WHITE);
-        panel.setCursor(3,3+y*25); panel.print(rows[y]);
+        panel.setCursor(3,3+y*25+(battery_visible && y==1?5:0)); panel.print(rows[y]);
+    }
+    if (battery_visible) {
+        char battery[5];
+        if (usb_powered) strcpy(battery,"USB");
+        else if (battery_percent<0) strcpy(battery,"--%");
+        else snprintf(battery,sizeof(battery),"%d%%",min(battery_percent,100));
+        /* Full seven-pixel label glyphs inside a thin outline. The first
+         * text row starts five pixels lower to leave room for the taller cell. */
+        constexpr int battery_y=21;
+        /* Seven extra pixels are about 1 mm at the panel's 0.135 mm pitch. */
+        int label_width=6*strlen(battery)-1, width=label_width+11;
+        int left=SIDE-5-width;
+        panel.fillRect(left,battery_y,width,1,BLACK);
+        panel.fillRect(left,battery_y+10,width,1,BLACK);
+        panel.fillRect(left,battery_y,1,11,BLACK);
+        panel.fillRect(left+width-1,battery_y,1,11,BLACK);
+        panel.fillRect(left+width,battery_y+3,2,5,BLACK);
+        panel.setTextSize(1); panel.setTextColor(BLACK);
+        panel.setCursor(left+(width-label_width)/2,battery_y+2); panel.print(battery);
     }
     if (v) {
         for (unsigned i=0;i<SCOPE_WIDTH;i++) {
@@ -177,14 +196,14 @@ static void draw(Screen rows,CardView card,const ScopeView *v) {
     }
 }
 
-bool board_paint(Screen rows, CardView card, const ScopeView *scope, bool clean) {
+bool board_paint(Screen rows, CardView card, const ScopeView *scope, int battery_percent, bool usb_powered, bool battery_visible, bool clean) {
     bool graph=scope!=nullptr;
     Refresh mode=(!known || clean) ? FACTORY : (graph && was_scope ? GRAPH : REPAINT);
     int64_t begin=uptime_ms();
     if (!known) { panel.setRotation(3); panel.setTextWrap(false); }
     uint8_t *image=panel.getBuffer();
     if (!image) return false;
-    draw(rows,card,scope);
+    draw(rows,card,scope,battery_percent,usb_powered,battery_visible);
     bool whole_page=mode==FACTORY || graph!=was_scope;
     Window w=whole_page ? whole : differences(image);
     if (w.right<0) {

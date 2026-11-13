@@ -127,6 +127,10 @@ For **later updates** to this receiver, run the build and flash commands only. T
 | Return to live reception | Hold for 0.8 seconds |
 | Open frequency settings | Double-click |
 
+On the T-Echo, hold the top capacitive button and count aloud **1001 1002 1003**, then release it to switch the display light on or off. The light changes when you release the sensor: if it was on, it turns off; if it was off, it turns on. To show or hide the battery icon, hold the sensor and count aloud **1001 1002 1003 1004 1005 1006 1007 1008**. As soon as the icon disappears or reappears, the command has been recognized and you can release the sensor. The longer gesture changes battery visibility once and leaves the light unchanged. These counting instructions give a comfortable margin over the firmware's unchanged two-second light and five-second battery thresholds. Brief touches do nothing. The light starts off and the battery icon starts visible after a restart. ADS-B reception and display updates continue with either setting. When the battery is hidden, the first text row returns to its original position.
+
+The T-Echo shows an estimated battery percentage at the top right, updated every 30 seconds while running on battery. It averages eight voltage readings from the board's battery divider and estimates LiPo charge from the voltage; this is approximate. An out-of-range reading shows `--%`. With USB power connected, it shows `USB` and does not measure or display a percentage: LilyGO documents that the ADC battery reading is inaccurate while charging. USB detection also works with a charger without a data connection. The red charging LED stays on during charging and turns off when fully charged; the firmware cannot read that LED's status. Type `battery` over USB to inspect the power source; `mv=0 percent=-1` means the battery estimate is unavailable on USB. [LilyGO charging and LED documentation](https://github.com/Xinyuan-LilyGO/T-Echo/blob/main/README.MD#charger-led-status)
+
 ### T-Echo e-paper refresh
 
 ![The T-Echo shows LAB123's altitude, then its coordinates. The callsign stays in place as the detail lines refresh.](docs/techo-refresh.gif)

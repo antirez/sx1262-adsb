@@ -22,8 +22,12 @@ static Menu menu;
 static const char *notice;
 static unsigned test_count, cleaning;
 static bool redraw;
+static unsigned battery_mv;
+static int battery_percent=-1;
+static bool usb_powered;
+static bool battery_visible=true;
 static int64_t cleared=-1;
-typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; } Page;
+typedef struct { Screen rows; CardView card; bool graph, usb_powered, battery_visible; ScopeView scope; unsigned cleaning; int battery_percent; } Page;
 
 static int arm(Capture *c) {
     uint32_t hz=atomic_load(&requested);
@@ -116,7 +120,7 @@ static void display_task(void *arg) {
         /* On timeout the old page is still here. A failed BUSY handshake
          * invalidates the panel shadow and the next attempt starts clean. */
         xQueueReceive(pages,&page,wait);
-        bool ok=board_paint(page.rows,page.card,page.graph?&page.scope:NULL,page.cleaning!=cleaned);
+        bool ok=board_paint(page.rows,page.card,page.graph?&page.scope:NULL,page.battery_percent,page.usb_powered,page.battery_visible,page.cleaning!=cleaned);
         if (ok) cleaned=page.cleaning;
         atomic_store(&painted,ok);
         wait=ok?portMAX_DELAY:pdMS_TO_TICKS(2500);
@@ -169,6 +173,10 @@ static void console(const Page *last_page) {
                 atomic_load(&polls),atomic_load(&dropped),atomic_load(&retries),atomic_load(&radio_error),
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap());
             board_print(msg);
+        } else if (!strcmp(line,"battery")) {
+            char msg[80];
+            snprintf(msg,sizeof(msg),"SXBATT usb=%d mv=%u percent=%d visible=%d\n",usb_powered,battery_mv,battery_percent,battery_visible);
+            board_print(msg);
         } else if (!strcmp(line,"dump")) { board_print(mounted && journal_dump() ? "SXEND\n" : "SXERROR reading journal\n"); }
         else if (!strcmp(line,"paper")) board_paper_status();
         else if (!strcmp(line,"paper clean")) { cleaning++; redraw=true; }
@@ -196,6 +204,7 @@ static void field_task(void *arg) {
     Button button={0};
     bool allow_clean=false;
     int64_t drawn=-1000;
+    int64_t battery_read=-30000;
     for (;;) {
         Result r;
         if (xQueueReceive(results,&r,pdMS_TO_TICKS(10)) && r.capture.last_ms>cleared) {
@@ -208,6 +217,23 @@ static void field_task(void *arg) {
             if (mounted) trace_ok=journal_save(&r,boot,test_count);
         }
         int64_t now=uptime_ms();
+        if (board_poll_touch(now)) {
+            battery_visible=!battery_visible;
+            redraw=true;
+        }
+        bool usb_now=board_usb_powered();
+        if (usb_now!=usb_powered) {
+            usb_powered=usb_now;
+            battery_mv=0; battery_percent=-1;
+            /* Allow the battery divider to settle after unplugging USB. */
+            battery_read=now-29900;
+            redraw=true;
+        }
+        if (!usb_powered && now-battery_read>=30000) {
+            battery_mv=board_battery_mv();
+            battery_percent=board_battery_percent(battery_mv);
+            battery_read=now;
+        }
         bool was_down=button.down;
         Key event=button_update(&button,board_button(),now);
         if (!was_down && button.down) allow_clean=!menu.open;
@@ -223,6 +249,9 @@ static void field_task(void *arg) {
         drawn=now;
         memset(&page,0,sizeof(page));
         page.cleaning=cleaning;
+        page.battery_percent=battery_percent;
+        page.usb_powered=usb_powered;
+        page.battery_visible=battery_visible;
         if (menu.open) {
             if (atomic_load(&failed)==menu.hz) {
                 menu.hz=atomic_load(&requested); notice="PLL did not lock";

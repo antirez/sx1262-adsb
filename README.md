@@ -203,3 +203,7 @@ A HackRF fed the T-Echo and an RTL-SDR through an attenuated splitter. The T-Ech
 With a packet every 150 ms and short carrier bursts in the gaps, the original firmware decoded **1 of 48** packets across three runs. The firmware that reserves queue space for long replies decoded **15 of 48**. The RTL-SDR decoded **47 of 48** in each series. The T-Echo dropped 826 captures because its queue was full with the original firmware. The new firmware filtered 777 captures by shape and had zero full-queue drops.
 
 With packets 650 ms apart and no inserted interference, the original firmware decoded **8 of 16** and the new firmware **4 of 16**. After the new decoder had caught up, two repeats of the same sequence yielded **10 and 11 of 16**. The RTL-SDR decoded all 16 in each quiet run. For the 15 packets decoded under interference, the median rise in packet-body RSSI was **16.2 dB** above the noise floor, the same median measured across 22 packets from an outdoor drive. These counts describe the conducted test at that signal level. [Individual DF17 runs](docs/techo-1090-coax.csv)
+
+## License
+
+The original code in this project is released under the [MIT License](LICENSE). Third-party components used in the firmware carry their own [license notices](firmware/NOTICES.txt).

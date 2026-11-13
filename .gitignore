@@ -1,0 +1,6 @@
+/misc/
+/build*/
+/host/build*/
+/sdkconfig
+/sdkconfig.old
+.DS_Store

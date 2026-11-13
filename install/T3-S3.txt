@@ -1,0 +1,20 @@
+LilyGO T3-S3 SX1262, 4 MB flash, USB-C and 128 x 64 OLED
+
+1. Extract this entire ZIP into a writable folder.
+2. Install Python 3. Open a terminal in the extracted folder and run
+       python -m pip install "esptool>=4.7,<6"
+   Use python3 on macOS/Linux or py on Windows if that is your Python command.
+   If your Python requests a virtual environment, run python3 -m venv .venv
+   and use .venv/bin/python for both commands on macOS/Linux.
+3. Connect the board with a USB data cable. Hold BOOT, tap and release RESET,
+   then release BOOT. Close any serial monitor.
+4. Run
+       python install.py
+   To select one of several boards, use python install.py --port COM5
+   or python3 install.py --port /dev/ttyACM0 with your actual port.
+5. After verification, tap RESET once if the OLED still shows the old image.
+
+On first install, the script saves and verifies a full 4 MB backup in the
+current folder before it writes firmware or clears the packet journal region.
+Keep that file to restore the old firmware. Updates of this receiver preserve
+the journal and frequency setting.

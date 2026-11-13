@@ -1,0 +1,11 @@
+#ifdef __APPLE__
+#define SYM(x) _##x
+.const
+#else
+#define SYM(x) x
+.section .rodata
+#endif
+@assembly@
+#if defined(__linux__)
+.section .note.GNU-stack,"",@progbits
+#endif

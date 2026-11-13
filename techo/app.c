@@ -37,7 +37,7 @@ typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsign
 enum { TRACE_SLOTS = 18 };
 typedef enum { QUEUED, FILTERED, FULL } Admission;
 typedef struct { Capture capture; Admission admission; } BenchTrace;
-static BenchTrace bench[TRACE_SLOTS];
+static BenchTrace *bench;
 static atomic_uint bench_count;
 static atomic_bool bench_armed;
 
@@ -236,16 +236,22 @@ static void console(const Page *last_page) {
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap());
             board_print(msg);
         } else if (!strcmp(line,"trace arm")) {
-            /* The higher-priority radio task cannot overlap this reset on the
-             * single-core T-Echo. A new arm explicitly replaces the old run. */
-            taskENTER_CRITICAL();
-            atomic_store(&bench_count,0);
-            atomic_store(&bench_armed,true);
-            taskEXIT_CRITICAL();
-            board_print("SXARMED 18\n");
+            /* Reserve the few kilobytes only for a requested bench run.
+             * The radio task is always higher priority on this single core. */
+            if (!bench) bench=malloc(TRACE_SLOTS*sizeof(*bench));
+            if (bench) {
+                taskENTER_CRITICAL();
+                atomic_store(&bench_count,0);
+                atomic_store(&bench_armed,true);
+                taskEXIT_CRITICAL();
+                board_print("SXARMED 18\n");
+            } else board_print("SXERROR out of trace memory\n");
         } else if (!strcmp(line,"trace dump")) {
             atomic_store(&bench_armed,false);
             bench_dump();
+            atomic_store(&bench_count,0);
+            free(bench);
+            bench=NULL;
         } else if (!strcmp(line,"dump")) { board_print(mounted && journal_dump() ? "SXEND\n" : "SXERROR reading journal\n"); }
         else if (!strcmp(line,"paper")) board_paper_status();
         else if (!strcmp(line,"paper clean")) { cleaning++; redraw=true; }

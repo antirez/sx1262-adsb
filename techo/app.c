@@ -31,6 +31,45 @@ static bool redraw;
 static int64_t cleared=-1;
 typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; } Page;
 
+/* Arm a short RAM recording over USB for the conducted test. Only the radio
+ * task writes these entries. Publish each completed entry with release/acquire
+ * so a dump can also read a partial run. Never print USB data in that task. */
+enum { TRACE_SLOTS = 18 };
+typedef enum { QUEUED, FILTERED, FULL } Admission;
+typedef struct { Capture capture; Admission admission; } BenchTrace;
+static BenchTrace bench[TRACE_SLOTS];
+static atomic_uint bench_count;
+static atomic_bool bench_armed;
+
+static void bench_record(const Capture *c, Admission admission) {
+    if (!atomic_load(&bench_armed)) return;
+    unsigned n=atomic_load(&bench_count);
+    if (n>=TRACE_SLOTS) return;
+    bench[n].capture=*c;
+    bench[n].admission=admission;
+    atomic_store(&bench_count,n+1);
+}
+
+static void bench_dump(void) {
+    static const char *const outcome[]={"queued","filtered","full"};
+    static const char hex[]="0123456789abcdef";
+    unsigned count=atomic_load(&bench_count);
+    for (unsigned i=0; i<count; i++) {
+        const Capture *c=&bench[i].capture;
+        char line[620];
+        int used=snprintf(line,sizeof(line),"SXTRACE %u %lld %lld %u %s ",
+            (unsigned)c->block,(long long)c->first_ms,(long long)c->last_ms,
+            c->floor,outcome[bench[i].admission]);
+        for (int j=0;j<SAMPLES;j++) {
+            line[used++]=hex[c->raw[j]>>4];
+            line[used++]=hex[c->raw[j]&15];
+        }
+        line[used++]='\n'; line[used]=0;
+        board_print(line);
+    }
+    board_print("SXEND\n");
+}
+
 static int arm(Capture *c) {
     uint32_t hz=atomic_load(&requested);
     if (hz!=c->dial_hz) {
@@ -81,9 +120,15 @@ static int receive(void) {
         if (state==SCAN_COMPLETE) {
             unsigned waiting=uxQueueMessagesWaiting(captures);
             ReplyShape needed=waiting<QUEUE_DEPTH/2 ? SHORT_REPLY : LONG_REPLY;
-            if (waiting>=UNCHECKED && atomic_load(&decoder_ok)>0 && decoder_candidate(&c)<needed)
+            Admission admission=QUEUED;
+            if (waiting>=UNCHECKED && atomic_load(&decoder_ok)>0 && decoder_candidate(&c)<needed) {
+                admission=FILTERED;
                 atomic_fetch_add(&filtered,1);
-            else if (!xQueueSend(captures,&c,0)) atomic_fetch_add(&dropped,1);
+            } else if (!xQueueSend(captures,&c,0)) {
+                admission=FULL;
+                atomic_fetch_add(&dropped,1);
+            }
+            bench_record(&c,admission);
         }
         if (recalibrate) {
             if (state==SCAN_ARMED && (err=radio_finish())) return err;
@@ -190,6 +235,17 @@ static void console(const Page *last_page) {
                 atomic_load(&retries),atomic_load(&radio_error),
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap());
             board_print(msg);
+        } else if (!strcmp(line,"trace arm")) {
+            /* The higher-priority radio task cannot overlap this reset on the
+             * single-core T-Echo. A new arm explicitly replaces the old run. */
+            taskENTER_CRITICAL();
+            atomic_store(&bench_count,0);
+            atomic_store(&bench_armed,true);
+            taskEXIT_CRITICAL();
+            board_print("SXARMED 18\n");
+        } else if (!strcmp(line,"trace dump")) {
+            atomic_store(&bench_armed,false);
+            bench_dump();
         } else if (!strcmp(line,"dump")) { board_print(mounted && journal_dump() ? "SXEND\n" : "SXERROR reading journal\n"); }
         else if (!strcmp(line,"paper")) board_paper_status();
         else if (!strcmp(line,"paper clean")) { cleaning++; redraw=true; }

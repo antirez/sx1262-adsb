@@ -1,0 +1,11 @@
+firmware_source,condition,sequence_seed,interval_ms,sent,techo_exact,rtl_sdr_exact,radio_triggers,filtered,full_queue_drops
+6c42e29,carrier bursts,1431,150,16,0,15,307,,286
+6c42e29,carrier bursts,1432,150,16,1,16,277,,256
+6c42e29,carrier bursts,1433,150,16,0,16,303,,284
+6c42e29,spaced,1487,650,16,8,16,22,,0
+97b9f4a,carrier bursts,1431,150,16,3,16,274,245,0
+97b9f4a,carrier bursts,1432,150,16,6,15,285,259,0
+97b9f4a,carrier bursts,1433,150,16,6,16,305,273,0
+97b9f4a,spaced,1487,650,16,4,16,19,2,0
+97b9f4a,"spaced, decoder idle before run",1487,650,16,10,16,22,3,0
+97b9f4a,"spaced, decoder idle before run",1487,650,16,11,16,23,1,0

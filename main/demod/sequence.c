@@ -157,9 +157,9 @@ static void alternate_paths(sx_list_workspace *w,int final) {
         if(k!=final)retain(w,k,-1,w->base.costs[0][k]);
 }
 
-/* The ESP32-S3 field decoder spends most of its time in the trellis.
+/* Both microcontrollers spend much of their decoding time in the trellis.
  * Keep the bus and register timing loops outside this optimization scope. */
-#if defined(__XTENSA__) && defined(__GNUC__)
+#if (defined(__XTENSA__) || defined(NRF52840_XXAA)) && defined(__GNUC__)
 #pragma GCC push_options
 #pragma GCC optimize ("O3")
 #endif
@@ -298,6 +298,10 @@ static int decode_window_header(const uint8_t *raw,size_t n,int anchor,const voi
         w->known_value[t]=value;
     }
     uint32_t signatures[SX_TEMPLATES];
+    /* Several timing grids place the body in exactly the same samples.
+     * The nine possible starts around this anchor then have the same gain
+     * and quiet level. Only the preamble fit depends on the grid phase. */
+    int cached_body=-1, cached_stop=-1, gains[9], floors[9];
     int count=0;
     for (int ph=0;ph<SX_TEMPLATES;ph++) {
         if ((ph&3)==0) SX_SERVICE_RX();
@@ -324,11 +328,17 @@ static int decode_window_header(const uint8_t *raw,size_t n,int anchor,const voi
         while (stop<m->fetches && ticks[stop]<(bits+8)*SX_PHASES) stop++;
         if (body>=stop || pre_end<=first) continue;
         int low=anchor>4?anchor-4:0;
+        bool reuse=body==cached_body && stop==cached_stop;
         for(int at=low;at<=anchor+4;at++) {
             if((size_t)(at+stop+13)>n || (size_t)(at+m->fetches)>n) continue;
-            int floor=quiet(raw+at+stop),sum=0;
-            for (int k=body;k<stop;k++) sum+=ratio_at(m,floor,raw[at+k]);
-            int gain=sum/(stop-body)-256;
+            int slot=at-low;
+            if (!reuse) {
+                int floor=quiet(raw+at+stop), sum=0;
+                for (int k=body;k<stop;k++) sum+=ratio_at(m,floor,raw[at+k]);
+                floors[slot]=floor;
+                gains[slot]=sum/(stop-body)-256;
+            }
+            int floor=floors[slot], gain=gains[slot];
             if(gain<=51) continue;
             int32_t error=0;
             for(int k=first;k<pre_end;k++) {
@@ -344,6 +354,8 @@ static int decode_window_header(const uint8_t *raw,size_t n,int anchor,const voi
                 insert(w->chosen,&count,q);
             }
         }
+        cached_body=body;
+        cached_stop=stop;
     }
     if(!frame)return count; /* Timing preparation for the two-response decoder. */
     if(alternatives)alternatives->count=0;
@@ -389,6 +401,6 @@ int sx_decode11(const uint8_t *raw,size_t n,int anchor,const void *model,size_t 
 
 #include "history.c"
 
-#if defined(__XTENSA__) && defined(__GNUC__)
+#if (defined(__XTENSA__) || defined(NRF52840_XXAA)) && defined(__GNUC__)
 #pragma GCC pop_options
 #endif

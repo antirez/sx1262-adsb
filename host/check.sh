@@ -29,3 +29,10 @@ cat > "$tmp/expected" <<'END'
 END
 diff -u "$tmp/expected" "$tmp/actual"
 printf 'illustrated position pair: 2 captures, 2 packets\n'
+
+# This timed coax packet first failed on the T-Echo. The input contains RSSI
+# only. Its independent RTL-SDR word belongs on the comparison side.
+"$replay" < "$here/../docs/1090-block-871.tsv" > "$tmp/results"
+cut -d' ' -f1,2 "$tmp/results" > "$tmp/actual"
+echo '871 8d000000c8540afe9ffe693c94ea' > "$tmp/expected"
+diff -u "$tmp/expected" "$tmp/actual"

@@ -83,7 +83,7 @@ static void make_test_shape(void) {
  * Count bins that carry both power and modulation: a strong narrow spike
  * can raise the average power, and a steady carrier can have the right
  * duration, but neither contains a train of half-microsecond pulses. */
-bool decoder_candidate(const Capture *c) {
+ReplyShape decoder_candidate(const Capture *c) {
     enum { BIN=8, BINS=SAMPLES/BIN };
     int level[BINS], peak=0, active=0;
     bool changing[BINS];
@@ -110,14 +110,15 @@ bool decoder_candidate(const Capture *c) {
     if (threshold<4*BIN) threshold=4*BIN;
     for (int b=0; b<BINS; b++)
         if (changing[b] && floor-level[b]>=threshold) active++;
-    if (active<7) return false;
+    if (active<7) return NO_REPLY;
     if (active<14) {
         int score;
-        return sx_short_gate(c->raw,SAMPLES,750000,0,SAMPLES,&score)>=0;
+        return sx_short_gate(c->raw,SAMPLES,750000,0,SAMPLES,&score)>=0 ? SHORT_REPLY : NO_REPLY;
     }
     candidate_t hit[2];
-    if (sx_preambles_model(c->raw,SAMPLES,shape_data,ASSET_SIZE(shape),hit,2,4,3500)) return true;
-    return sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),hit,2,4,3500)>0;
+    if (sx_preambles_model(c->raw,SAMPLES,shape_data,ASSET_SIZE(shape),hit,2,4,3500) ||
+        sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),hit,2,4,3500)) return LONG_REPLY;
+    return NO_REPLY;
 }
 
 /* A completed Result is always checked independently of the search that

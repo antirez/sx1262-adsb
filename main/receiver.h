@@ -28,7 +28,8 @@ typedef void (*Report)(const Result *result);
 
 /* When the input queue backs up, reserve space for plausible short or long
  * replies. Call after decoder_init. */
-bool decoder_candidate(const Capture *capture);
+typedef enum { NO_REPLY, SHORT_REPLY, LONG_REPLY } ReplyShape;
+ReplyShape decoder_candidate(const Capture *capture);
 
 /* One decoder owns its scratch, tracks and pending captures. Call these from
  * the same task. A second task can queue radio captures at any time. */

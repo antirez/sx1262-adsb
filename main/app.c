@@ -134,7 +134,9 @@ static esp_err_t listen(void) {
         }
         int64_t rearmed=esp_timer_get_time();
         if (state==SCAN_COMPLETE) {
-            if (uxQueueMessagesWaiting(captures)>=UNCHECKED && !decoder_candidate(&c)) {
+            unsigned waiting=uxQueueMessagesWaiting(captures);
+            ReplyShape needed=waiting<QUEUE_DEPTH/2 ? SHORT_REPLY : LONG_REPLY;
+            if (waiting>=UNCHECKED && decoder_candidate(&c)<needed) {
                 atomic_fetch_add(&filtered,1);
             } else if (xQueueSend(captures,&c,0)!=pdTRUE) {
                 atomic_fetch_add(&full_queue,1);

@@ -79,8 +79,9 @@ static int receive(void) {
         if (state==SCAN_COMPLETE && !recalibrate && (err=radio_arm(c.threshold))) return err;
         last=uptime_ms();
         if (state==SCAN_COMPLETE) {
-            if (uxQueueMessagesWaiting(captures)>=UNCHECKED &&
-                atomic_load(&decoder_ok)>0 && !decoder_candidate(&c))
+            unsigned waiting=uxQueueMessagesWaiting(captures);
+            ReplyShape needed=waiting<QUEUE_DEPTH/2 ? SHORT_REPLY : LONG_REPLY;
+            if (waiting>=UNCHECKED && atomic_load(&decoder_ok)>0 && decoder_candidate(&c)<needed)
                 atomic_fetch_add(&filtered,1);
             else if (!xQueueSend(captures,&c,0)) atomic_fetch_add(&dropped,1);
         }

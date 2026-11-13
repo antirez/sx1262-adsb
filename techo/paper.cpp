@@ -150,7 +150,22 @@ static int signal_y(unsigned code) {
     if (code>240) code=240;
     return 53+(int)(code-80)*80/160;
 }
-static void draw(Screen rows,CardView card,const ScopeView *v) {
+enum { BATTERY_X=174 };
+static void draw_battery(int level) {
+    const int x=BATTERY_X, y=32;
+    panel.fillRect(x,y,21,14,BLACK);
+    panel.fillRect(x+1,y+1,19,12,WHITE);
+    panel.fillRect(x+21,y+4,3,6,BLACK);
+    if (level<0) {
+        panel.setTextColor(BLACK); panel.setTextSize(1);
+        panel.setCursor(x+(level==BATTERY_USB?2:8),y+3);
+        panel.print(level==BATTERY_USB?"USB":"?");
+    } else {
+        for (int i=0;i<level;i++) panel.fillRect(x+3+4*i,y+3,3,8,BLACK);
+    }
+}
+
+static void draw(Screen rows,CardView card,const ScopeView *v,int battery) {
     panel.fillScreen(WHITE);
     panel.fillRect(0,0,200,20,BLACK);
     bool plane=card==AIRCRAFT_CARD || card==POSITION_CARD;
@@ -158,9 +173,19 @@ static void draw(Screen rows,CardView card,const ScopeView *v) {
         if (!rows[y][0]) continue;
         bool big=(plane && (y==1 || y==3)) || (card==POSITION_CARD && y==5);
         int n=strlen(rows[y]), size=big ? min(4,200/(6*n)) : 2;
+        /* Leave the header to the history number and the reception time.
+         * Beside the battery, even an eight-letter callsign fits at full
+         * height if we take a few pixels out of the spaces between letters. */
+        int first=3, last=BATTERY_X-3-5*size;
+        if (y==1 && first+(n-1)*6*size>last) {
+            for (int i=0;i<n;i++)
+                panel.drawChar(first+i*(last-first)/(n-1),28,rows[y][i],BLACK,BLACK,size);
+            continue;
+        }
         panel.setTextSize(size); panel.setTextColor(y?BLACK:WHITE);
         panel.setCursor(3,3+y*25); panel.print(rows[y]);
     }
+    draw_battery(battery);
     if (v) {
         for (unsigned i=0;i<SCOPE_WIDTH;i++) {
             int x=2+i*195/(SCOPE_WIDTH-1);
@@ -177,14 +202,14 @@ static void draw(Screen rows,CardView card,const ScopeView *v) {
     }
 }
 
-bool board_paint(Screen rows, CardView card, const ScopeView *scope, bool clean) {
+bool board_paint(Screen rows, CardView card, const ScopeView *scope, int battery, bool clean) {
     bool graph=scope!=nullptr;
     Refresh mode=(!known || clean) ? FACTORY : (graph && was_scope ? GRAPH : REPAINT);
     int64_t begin=uptime_ms();
     if (!known) { panel.setRotation(3); panel.setTextWrap(false); }
     uint8_t *image=panel.getBuffer();
     if (!image) return false;
-    draw(rows,card,scope);
+    draw(rows,card,scope,battery);
     bool whole_page=mode==FACTORY || graph!=was_scope;
     Window w=whole_page ? whole : differences(image);
     if (w.right<0) {

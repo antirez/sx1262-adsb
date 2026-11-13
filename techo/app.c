@@ -29,7 +29,8 @@ static const char *notice;
 static unsigned test_count, cleaning;
 static bool redraw;
 static int64_t cleared=-1;
-typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; } Page;
+static Battery battery={.level=BATTERY_UNKNOWN};
+typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; int battery; } Page;
 
 /* Arm a short RAM recording over USB for the conducted test. Only the radio
  * task writes these entries. Publish each completed entry with release/acquire
@@ -181,7 +182,7 @@ static void display_task(void *arg) {
         /* On timeout the old page is still here. A failed BUSY handshake
          * invalidates the panel shadow and the next attempt starts clean. */
         xQueueReceive(pages,&page,wait);
-        bool ok=board_paint(page.rows,page.card,page.graph?&page.scope:NULL,page.cleaning!=cleaned);
+        bool ok=board_paint(page.rows,page.card,page.graph?&page.scope:NULL,page.battery,page.cleaning!=cleaned);
         if (ok) cleaned=page.cleaning;
         atomic_store(&painted,ok);
         wait=ok?portMAX_DELAY:pdMS_TO_TICKS(2500);
@@ -228,12 +229,13 @@ static void console(const Page *last_page) {
         if (!used) continue;
         line[used]=0; used=0;
         if (!strcmp(line,"status")) {
-            char msg[320];
-            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d\n",
+            char msg[384];
+            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d usb=%d adc_mv=%u\n",
                 boot,(int)atomic_load(&ready),atomic_load(&decoder_ok),atomic_load(&bursts),
                 atomic_load(&polls),atomic_load(&dropped),atomic_load(&filtered),atomic_load(&deferred),atomic_load(&idle_polls),
                 atomic_load(&retries),atomic_load(&radio_error),
-                mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap());
+                mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap(),
+                battery.level==BATTERY_USB,battery.mv);
             board_print(msg);
         } else if (!strcmp(line,"trace arm")) {
             /* Reserve the few kilobytes only for a requested bench run.
@@ -306,6 +308,8 @@ static void field_task(void *arg) {
         drawn=now;
         memset(&page,0,sizeof(page));
         page.cleaning=cleaning;
+        board_read_battery(&battery,now);
+        page.battery=battery.level;
         if (menu.open) {
             if (atomic_load(&failed)==menu.hz) {
                 menu.hz=atomic_load(&requested); notice="PLL did not lock";

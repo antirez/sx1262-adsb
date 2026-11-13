@@ -40,6 +40,7 @@ bool decoder_idle(int64_t now_ms);
 unsigned decoder_evictions(void);
 uint32_t modes_crc(const uint8_t *word, size_t length);
 
+char *receiver_decimal(int64_t value, char buffer[22]);
 void observation(char *line, size_t capacity, const Result *r, uint32_t boot,
                  int64_t now, unsigned test_count, unsigned deferred_drops);
 

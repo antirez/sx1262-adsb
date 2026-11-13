@@ -56,9 +56,9 @@ static void bench_dump(void) {
     unsigned count=atomic_load(&bench_count);
     for (unsigned i=0; i<count; i++) {
         const Capture *c=&bench[i].capture;
-        char line[620];
-        int used=snprintf(line,sizeof(line),"SXTRACE %u %lld %lld %u %s ",
-            (unsigned)c->block,(long long)c->first_ms,(long long)c->last_ms,
+        char line[620], first[22], last[22];
+        int used=snprintf(line,sizeof(line),"SXTRACE %u %s %s %u %s ",
+            (unsigned)c->block,receiver_decimal(c->first_ms,first),receiver_decimal(c->last_ms,last),
             c->floor,outcome[bench[i].admission]);
         for (int j=0;j<SAMPLES;j++) {
             line[used++]=hex[c->raw[j]>>4];

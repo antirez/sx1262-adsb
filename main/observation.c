@@ -15,7 +15,7 @@ static void hex(const uint8_t *bytes, size_t n, char *out) {
 
 /* newlib-nano on the T-Echo supports 64-bit arithmetic but its printf
  * leaves %lld arguments unread. Keep long uptimes portable on both boards. */
-static char *decimal(int64_t value, char buffer[22]) {
+char *receiver_decimal(int64_t value, char buffer[22]) {
     char *p=buffer+21;
     uint64_t n=value<0 ? -(uint64_t)value : (uint64_t)value;
     *p=0;
@@ -53,5 +53,5 @@ void observation(char *line, size_t capacity, const Result *r, uint32_t boot,
         "\"quiet_code\":%u,\"trigger_code\":%u,\"anchor\":%d,\"preamble_score\":%d,"
         "\"period_us\":0.75,\"trigger_samples\":80,\"history_samples\":84,\"trigger_stride\":1,"
         "\"rf_profile\":\"1 MHz / fast RSSI\",\"sampler\":\"onchip\",\"deferred_drops\":%u,\"raw\":\"%s\"%s}",
-        boot,c->block,decimal(now,t),decimal(c->first_ms,first),decimal(c->last_ms,last),c->dial_hz,c->floor,c->threshold,r->anchor,r->score,deferred_drops,raw,extra);
+        boot,c->block,receiver_decimal(now,t),receiver_decimal(c->first_ms,first),receiver_decimal(c->last_ms,last),c->dial_hz,c->floor,c->threshold,r->anchor,r->score,deferred_drops,raw,extra);
 }

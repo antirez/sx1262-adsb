@@ -55,3 +55,24 @@ A separate trial tested the callsign question. Of nine time-matched physical cal
 For the next coax comparison I would capture one run's worth of timing and decisions in RAM. Give each trigger its capture number, capture-time interval, queue decision, detected preamble and final decode status. Keep the raw 256-byte waveform for the 16 quiet slots, including failures, and download it after the run so the serial output does not change the timing. Match against the RTL-SDR clock using the known transmission cadence. Then compare the current firmware, the model reordering, and the bounded retry when the primary queue is empty. Use fresh, previously unseen words, including callsigns, positions and velocities, plus silent slots. Score exact words per transmission and unexpected decodes separately. This distinguishes a missing trigger from a capture thrown away under load or a waveform that needs a better decoder.
 
 [1090 MHz run totals](techo-1090-coax.csv) · [Block 871](1090-block-871.tsv) · [Standalone recovery experiment](../host/experiments/weak_reply.c) · [Production decoder](../main/decoder.c) · [T-Echo queues and journal policy](../techo/app.c)
+
+## T-Echo splitter follow-up
+
+The T-Echo and an RTL-SDR received the same attenuated 1090 MHz signal. The dial was 1089.800 MHz. The quiet series used 16 distinct reserved DF17 test words at 650 ms intervals. The busy series used 16 other words at 150 ms intervals with carrier bursts in the gaps. Every board replay used the same transmitted word sequences and transmit gain. The two experimental runs that tried the new fit on the first idle pass used the same decoder. The second of those released the temporary trace buffer after download.
+
+| Firmware or retry order | Quiet, T-Echo / 16 | Busy, T-Echo / 16 | Quiet, RTL / 16 | Busy, RTL / 16 |
+| --- | ---: | ---: | ---: | ---: |
+| Published build | 4 | 9 | 16 | 16 |
+| Retry last when idle | 0 | 4 | 16 | 16 |
+| Retry first when idle | 8 | 13 | 16 | 16 |
+| Retry first, repeat | 10 | 11 | 16 | 15 |
+
+Counts include delayed results from the same capture-number interval in subsequent journal dumps. In the first experimental run the trace formatter mishandled 64-bit times on the Nordic C library. I corrected it before the two first-idle runs. Those runs recorded valid capture times, full RSSI bytes, and queue decisions. On both, all 16 quiet transmissions produced a capture and all 16 entered the decoder queue. The second recording also included one unrelated trigger.
+
+Giving the published decoder the first set of quiet waveforms on a Mac recovered 5/16. The experimental decoder got 10/16 on those identical waveforms. On the second set the comparison was 5/16 versus 11/16. Both comparisons used the independent transmitted words for grading and fed only recordings to the decoders. On the device, the same two runs produced 8/16 and 10/16 after allowing deferred processing. These comparisons demonstrate a gain in decoding the captured signal. The busy runs varied substantially, and the two quiet runs used the same 16 transmitted words. Outdoor improvement and performance on new aircraft messages remain to be measured.
+
+The first complete 16-packet recording is in the host regression suite. Column six contains the transmitted word even for packets the decoder missed. Strip it before replay. [Recorded quiet sequence](../host/fixtures/techo-1090-quiet.tsv.gz)
+
+```sh
+gzip -dc host/fixtures/techo-1090-quiet.tsv.gz | cut -f1-5 | host/build/replay
+```

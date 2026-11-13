@@ -59,6 +59,8 @@ When the decoder keeps up, it gets every recording. Once four recordings are wai
 
 Over USB, `status` reports how many captures this check skipped (`filtered`), how many passed but had no queue slot (`queue_full`), and how many deferred attempts were evicted or cleared on retune (`deferred_drops`). When `idle_polls` advances, the decoder has caught up with both queues. [Queue admission](main/decoder.c)
 
+On a strong burst that fails the first pass, the decoder waits for the input queue to drain. It then tries the fast 1090 MHz model again with a 10% larger amplitude estimate. This time it scores nearby sampling alignments over the full 112 bits and checks the best four using the transmitted CRC. In a recorded T-Echo run this recovered five more exact words from the same sixteen waveforms. [Packet recovery measurements](docs/packet-recovery.md)
+
 ### An aircraft packet, from power readings to bits
 
 The LilyGO recorded the following transmission from aircraft `4BAA79`. Each dot is one reading from the SX1262. The radio measured a quiet level of −95.5 dBm before this capture. The strongest sample reached −61 dBm. The four preamble pulses occupy the first 8 µs, and the 112 message bits occupy the next 112 µs.
@@ -193,6 +195,8 @@ host/build/receiverctl "$PORT" dump > field.jsonl
 ```
 
 The dump is one JSON object per line. Each capture includes the 256 raw RSSI readings, the noise floor and the actual receiver setting, `dial_hz`. The older `signal_hz` field always identifies the nominal 1090 MHz aircraft channel. For an off-band bench recording, use the generator setting for the carrier frequency. Accepted packets also include the decoded bytes. In a serial monitor, `screen` returns the T3-S3 OLED image as eight pages of 128 bytes in hexadecimal. On the T-Echo it returns the eight lines selected for the e-paper display. Type `paper` for the last update time and counts of factory cleans (`full`), text repaints (`repaint`), graph updates (`fast`), skipped updates and errors. Type `paper clean` to request a full refresh over USB.
+
+For a short T-Echo bench run, send `trace arm` in a serial terminal before the transmissions. The radio task keeps up to 18 consecutive captures in RAM, including those rejected by the decoder queue. After the transmissions, send `trace dump`. Each `SXTRACE` line gives the capture number, the last armed and first completed poll times in milliseconds, the floor in half-decibel codes, the queue decision (`queued`, `filtered` or `full`), and 256 RSSI bytes in hexadecimal. `SXEND` ends the dump and releases the buffer. The ordinary packet journal continues to work during the test.
 
 The replay tests feed saved RSSI samples through the same C decoder used on both boards. They check 24 expected DF17 packets in 98 outdoor and bench captures, four earlier bench test messages, 15 background captures with no expected message, and both airborne position reports illustrated above. The expected words are kept out of the decoder input. These tests check bit recovery on known recordings. Measuring range or missed transmissions requires a live RF comparison. [Replay tests and fixtures](host)
 

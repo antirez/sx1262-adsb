@@ -540,10 +540,20 @@ void decoder_capture(const Capture *c) {
     int n = sx_preambles_model(c->raw,SAMPLES,shape_data,ASSET_SIZE(shape),positions,12,4,3500);
     bool hint = c->last_ms >= hint_ms && c->last_ms-hint_ms <= 60000;
     collect_short(c);
+    /* On the strongest preamble, try the responses measured at 1090 MHz
+     * first. A good match here saves several full-frame trellis searches. */
+    for (int i = 0; i < n; i++)
+        if (positions[i].score > best.score) best = positions[i];
+    if (n) {
+        position(&r,best);
+        if (try_model(&r,BAND1090) || try_model(&r,FAST1090) ||
+            try_model(&r,RF) || try_model(&r,REG)) goto independent;
+    }
     for (int i = 0; i < n; i++) {
+        if (positions[i].sample == best.sample) continue;
         position(&r,positions[i]);
-        if (r.score > best.score) best = positions[i];
-        if (try_model(&r,RF) || try_model(&r,REG)) goto independent;
+        if (try_model(&r,RF) || try_model(&r,REG) || try_model(&r,BAND1090))
+            goto independent;
     }
     if (hint) {
         Response m = models[REG];
@@ -554,12 +564,6 @@ void decoder_capture(const Capture *c) {
             if (accept(&r,rank,"DF11-assisted",17)) goto done;
         }
     }
-    for (int i = 0; i < n; i++) {
-        position(&r,positions[i]);
-        if (try_model(&r,BAND1090)) goto independent;
-    }
-    position(&r,best);
-    if (n && try_model(&r,FAST1090)) goto independent;
     if (n && try_family(&r,positions,n,hint)) return;
     int nf = sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),fixture,3,4,3500);
     Response m = models[BAND1090];

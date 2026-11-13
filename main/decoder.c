@@ -162,7 +162,7 @@ static void position(Result *r, candidate_t p) {
 #ifndef MAX_PENDING
 #define MAX_PENDING 96
 #endif
-enum FitStage { FIT_1090, FIT_MEASURED, FIT_HEADER, FIT_RESIDUAL, FIT_REPEAT, FIT_WHOLE, FIT_DONE };
+enum FitStage { FIT_WHOLE, FIT_1090, FIT_MEASURED, FIT_HEADER, FIT_RESIDUAL, FIT_REPEAT, FIT_DONE };
 typedef struct {
     Result r;
     enum FitStage stage;
@@ -454,7 +454,7 @@ static void defer(Result *r) {
     Pending *p = &pending[(head+count++)%MAX_PENDING];
     p->r = *r;
     p->strong = rise >= 14*128;
-    p->stage = p->strong ? FIT_1090 : rise >= 12*128 ? FIT_HEADER : FIT_REPEAT;
+    p->stage = p->strong ? FIT_WHOLE : rise >= 12*128 ? FIT_HEADER : FIT_REPEAT;
 }
 
 unsigned decoder_evictions(void) {
@@ -474,6 +474,15 @@ bool decoder_idle(int64_t now_ms) {
     enum FitStage stage = p->stage;
     if (stage != FIT_DONE) p->stage++;
     switch (stage) {
+    case FIT_WHOLE:
+        /* Retry a strong burst while it is still near the head of the queue.
+         * We get here only between fresh captures. The adaptive and history
+         * passes can still use the original trace if this fit fails. */
+        r->support_count = 0;
+        rank = fit_whole_reply(r->capture.raw,r->anchor,r->word);
+        ok = accept(r,rank,"whole-reply timing",17);
+        if (ok) remember(r);
+        break;
     case FIT_1090:
     case FIT_MEASURED:
         m = models[stage==FIT_1090 ? BAND1090 : RF];
@@ -504,16 +513,6 @@ bool decoder_idle(int64_t now_ms) {
         }
         break;
     }
-    case FIT_WHOLE:
-        /* Only a sustained strong burst warrants a final full-frame search.
-         * Start this stage on a separate idle call to let fresh captures in. */
-        if (p->strong) {
-            r->support_count = 0;
-            rank = fit_whole_reply(r->capture.raw,r->anchor,r->word);
-            ok = accept(r,rank,"whole-reply timing",17);
-            if (ok) remember(r);
-        }
-        break;
     case FIT_DONE:
         break;
     }

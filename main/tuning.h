@@ -30,7 +30,7 @@ typedef struct {
     unsigned samples, columns, triggers;
     int level, strongest;
 } ScopeView;
-typedef enum { TUNE_UP, TUNE_DOWN, STEP_SIZE, DEFAULT_FREQ, DISCARD, CLEAR_HISTORY, SLEEP_NOW } Action;
+typedef enum { SLEEP_NOW, TUNE_UP, TUNE_DOWN, STEP_SIZE, DEFAULT_FREQ, DISCARD, CLEAR_HISTORY } Action;
 typedef struct { uint32_t hz; unsigned step; Action action; bool open; } Menu;
 
 Key button_update(Button *b, bool pressed, int64_t now);

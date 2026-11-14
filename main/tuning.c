@@ -130,11 +130,11 @@ static const uint32_t steps[]={1000,10000,100000,1000000,10000000};
 static const char *labels[]={"1 kHz","10 kHz","100 kHz","1 MHz","10 MHz"};
 
 void menu_open(Menu *m, uint32_t hz) {
-    *m=(Menu){.open=true,.hz=hz,.step=2,.action=TUNE_UP};
+    *m=(Menu){.open=true,.hz=hz,.step=2,.action=SLEEP_NOW};
 }
 
 void menu_next(Menu *m) {
-    m->action=(m->action+1)%(SLEEP_NOW+1);
+    m->action=(m->action+1)%(CLEAR_HISTORY+1);
 }
 
 void menu_adjust(Menu *m) {
@@ -171,7 +171,10 @@ void menu_screen(const Menu *m, const ScopeView *v, const char *message, bool to
         strcpy(s[6],"Clear history");
         if (!touch_pad) { strcpy(s[7],"Hold to erase"); return; }
         break;
-    case SLEEP_NOW: snprintf(s[6],17,"%sSleep",hold); break;
+    case SLEEP_NOW:
+        strcpy(s[6],"Enter sleep");
+        if (!touch_pad) { strcpy(s[7],"Hold to sleep"); return; }
+        break;
     }
     strcpy(s[7],"Tap next 2x save");
 }

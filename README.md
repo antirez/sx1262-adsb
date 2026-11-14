@@ -137,7 +137,7 @@ For **later updates** to this receiver, run the build and flash commands only. T
 
 After **30 minutes without a valid packet**, the receiver goes to sleep. The timer starts at power-on or wake. A decoded packet starts another 30 minutes from its reception time. Noise and RSSI triggers leave the timer alone. Before sleeping, the receiver finishes decoding the captures already in memory and saves the accepted packets.
 
-To sleep immediately, double-click the user button to enter settings, then tap it until **Sleep** appears. On the **T-Echo**, tap the capacitive pad on top or hold the side user button to select it. On the **T3-S3**, hold BOOT. Release the control after selecting Sleep.
+To sleep immediately, double-click the user button. Settings opens on **Enter sleep**. On the **T-Echo**, tap the capacitive pad on top or hold the side user button to select it. On the **T3-S3**, hold BOOT. Release the control after selecting it.
 
 | Board | While asleep | To wake |
 | --- | --- | --- |
@@ -188,7 +188,7 @@ For the first position the board needs one odd and one even airborne position re
 
 Aircraft transmit on 1090 MHz. The default **receiver dial is 1089.800 MHz**. Both of our boards picked up weak bench signals better with this offset. On the T-Echo, the response dipped when the signal was close to the dial frequency and recovered on either side. The best dial setting may vary between boards. [T-Echo tuning measurements](docs/techo-tuning.md)
 
-In settings, **tap the user button** to cycle through increase, decrease, step size, default, discard, clear history and sleep. **Hold** to apply the selected action. On the T-Echo, **tap the top pad** to do the same thing. The radio retunes immediately after a frequency change. **Double-click the user button** to save the frequency across power cycles and return to the aircraft display.
+In settings, **tap the user button** to cycle through **Enter sleep**, increase frequency, decrease frequency, step size, default, discard and clear history. **Hold** to apply the selected action. On the T-Echo, **tap the top pad** to do the same thing. The radio retunes immediately after a frequency change. **Double-click the user button** to save the frequency across power cycles and return to the aircraft display.
 
 To start a new outing with an empty list, tap until **Clear history** appears. Hold the button for 0.8 seconds or tap the T-Echo pad. **History cleared** confirms that the aircraft count was reset and the saved packet recordings were permanently deleted, including those available over USB. The separate background power recordings and the tuned frequency are kept.
 

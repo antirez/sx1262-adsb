@@ -35,6 +35,9 @@ int main(void) {
 
     Menu m;
     menu_open(&m,DEFAULT_HZ);
+    CHECK(m.action==SLEEP_NOW);
+    menu_next(&m);
+    CHECK(m.action==TUNE_UP);
     menu_adjust(&m);
     CHECK(m.hz==DEFAULT_HZ+100000);
     menu_next(&m);
@@ -130,9 +133,9 @@ int main(void) {
     menu_next(&m);
     CHECK(m.action==SLEEP_NOW);
     menu_screen(&m,&v,NULL,true,s);
-    CHECK(!strcmp(s[5],"Hold or tap pad") && !strcmp(s[6],"Sleep"));
+    CHECK(!strcmp(s[5],"Hold or tap pad") && !strcmp(s[6],"Enter sleep"));
     menu_screen(&m,&v,NULL,false,s);
-    CHECK(!*s[5] && !strcmp(s[6],"Hold: Sleep"));
+    CHECK(!*s[5] && !strcmp(s[6],"Enter sleep") && !strcmp(s[7],"Hold to sleep"));
     menu_next(&m);
     CHECK(m.action==TUNE_UP);
     return 0;

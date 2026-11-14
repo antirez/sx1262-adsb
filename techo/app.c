@@ -32,6 +32,7 @@ static bool redraw;
 static int64_t cleared=-1;
 static Battery battery={.level=BATTERY_UNKNOWN};
 static SleepControl sleep_control;
+static bool ignore_button, ignore_pad;
 typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; int battery; } Page;
 
 /* Arm a short RAM recording over USB for the conducted test. Only the radio
@@ -309,7 +310,6 @@ static void field_task(void *arg) {
     static Page page, previous;
     static Scope snapshot;
     Button button={0}, pad={0};
-    bool accept_keys=false;
     bool allow_clean=false;
     int64_t drawn=-1000;
     for (;;) {
@@ -326,11 +326,12 @@ static void field_task(void *arg) {
         }
         int64_t now=uptime_ms();
         bool pressed=board_button(), touched=board_touch();
-        if (!pressed && !touched) accept_keys=true; /* Consume the press that woke us. */
+        if (!pressed) ignore_button=false;
+        if (!touched) ignore_pad=false;
         bool was_down=button.down;
-        Key event=button_update(&button,accept_keys && pressed,now);
+        Key event=button_update(&button,pressed && !ignore_button,now);
         bool pad_down=pad.down;
-        button_update(&pad,accept_keys && touched,now);
+        button_update(&pad,touched && !ignore_pad,now);
         if (!was_down && button.down) allow_clean=!menu.open;
         /* Fire once on a debounced pad press. Holding a finger there must
          * never apply the same setting twice. A pad press in LIVE is idle. */
@@ -378,6 +379,10 @@ static void field_task(void *arg) {
 }
 
 void techo_start(void) {
+    /* A wake press belongs to the previous screen. Ignore that input until
+     * release, but let the user work the other control immediately. */
+    ignore_button=board_button();
+    ignore_pad=board_touch();
     sleep_control.last_packet=uptime_ms();
     boot=board_random(); history_set_boot(boot);
     mounted=journal_begin(&saved); atomic_store(&requested,saved);

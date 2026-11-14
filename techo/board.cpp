@@ -18,7 +18,7 @@ void board_begin(void) {
     digitalWrite(GPS_WAKE,LOW); pinMode(GPS_WAKE,OUTPUT);
     pinMode(POWER,OUTPUT); digitalWrite(POWER,HIGH);
     pinMode(BUTTON,INPUT_PULLUP);
-    pinMode(TOUCH,INPUT);  /* TTP223 drives this pin high while touched. */
+    pinMode(TOUCH,INPUT_PULLUP);  /* P0.11 is high at rest, low under a finger. */
     pinMode(LIGHT,OUTPUT); digitalWrite(LIGHT,LOW);
     analogReference(AR_INTERNAL_3_0);
     analogReadResolution(12);
@@ -56,7 +56,7 @@ void board_read_battery(Battery *battery, int64_t now) {
 
 void board_bootloader(void) { enterUf2Dfu(); }
 bool board_button(void) { return digitalRead(BUTTON)==LOW; }
-bool board_touch(void) { return digitalRead(TOUCH)==HIGH; }
+bool board_touch(void) { return digitalRead(TOUCH)==LOW; }
 void board_sleep(void) {
     /* Leave PWR_ON asserted. Removing the battery supply would also remove
      * our means of waking by touch. GPS, radio and e-paper sleep separately. */
@@ -67,7 +67,7 @@ void board_sleep(void) {
         delay(10);
         released=board_button() || board_touch() ? 0 : released+1;
     }
-    pinMode(TOUCH,INPUT_SENSE_HIGH);   /* TTP223 is powered from the nRF rail. */
+    pinMode(TOUCH,INPUT_PULLUP_SENSE); /* Wake on the same low level used in Settings. */
     /* System OFF wakes through reset. Our user button is also the factory
      * bootloader's DFU button. Its one-shot SKIP cookie tells it to run the
      * receiver even if the user is still pressing that button on wake. */

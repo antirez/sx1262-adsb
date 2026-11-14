@@ -144,7 +144,9 @@ To sleep immediately, double-click the user button. Settings opens on **Enter sl
 | T-Echo | The e-paper holds the aircraft picture with the front light off. | Tap the top pad or press the side user button. |
 | T3-S3 | The OLED and its charge pump switch off. | Press BOOT. |
 
-<img src="docs/techo-sleep.png" width="200" alt="The T-Echo sleep screen shows a jet banking over Mount Etna. The bottom strip reads touch any button to awake.">
+<img src="docs/techo-sleep-panel.jpg" width="280" alt="iPhone photograph of the sleeping T-Echo. A passenger jet flies over Mount Etna. The bottom strip reads touch any button to awake.">
+
+The photograph shows the ink on the sleeping board. [View the 200 × 200 image sent to the display](docs/techo-sleep.png).
 
 The radio stops listening during sleep. On wake, the receiver opens LIVE on the saved frequency and reloads the packet history. Double-click to save any frequency change before putting the board to sleep. On the T-Echo, the L76K GPS stays in standby throughout normal use. Aircraft coordinates come from the aircraft's position messages. [Quectel L76K standby input](https://snapeda.s3.amazonaws.com/media/quectel/Quectel_L76K_Reference_Design_V1.0%20.pdf) · [T-Echo pins](https://github.com/Xinyuan-LilyGO/T-Echo#-hardware-description)
 
@@ -159,6 +161,8 @@ On our T-Echo at room temperature, changing between a text-heavy flight card and
 The frequency screen washes the white background once when you enter or leave it. As the RSSI graph scrolls, only pixels that actually change get a pulse. A trace can leave a faint trail while you tune. The panel runs its factory clean at power-on. To request another, **hold the user button for three seconds** from a flight or history screen. It returns to LIVE at the usual 0.8 seconds and keeps listening during the clean.
 
 The SSD1681 has two RAM bits per pixel. Together they select one of four waveforms. The driver uses them to leave a pixel alone, draw it black, erase it to white, or briefly invert and restore nearby white paper. On text pages each phase lasts four frames. A changing stroke gets both phases in the same direction. The neighboring white paper gets four frames in each direction. This adapts the fast waveform in the Badger 2040 experiments to the SSD1681. The RSSI graph uses a single six-frame pulse. The firmware powers down the panel's analog supply after each update. [T-Echo driver](techo/paper.cpp) · [Badger waveforms](https://github.com/antirez/uc8151_micropython/blob/cc2a0de91386f08ee6c08e6e315bcfef850ffc49/uc8151.py#L449) · [SSD1681 datasheet, sections 6.5–6.7 and command 0Ch](https://cdn-learn.adafruit.com/assets/assets/000/099/573/original/SSD1681.pdf)
+
+The sleep picture uses those same two bits to select four shades. First the panel erases the picture area to white and draws the wake-up caption in black and white. White pixels and the caption then sit still, while light gray, dark gray and black get 2, 4 and 12 frames of drive toward black. The controller switches off after the last frame and the ink holds the picture. These timings were measured on the T-Echo at room temperature. [Badger grayscale driver](https://github.com/antirez/uc8151_micropython/blob/cc2a0de91386f08ee6c08e6e315bcfef850ffc49/uc8151.py#L755)
 
 ### Reading the display
 

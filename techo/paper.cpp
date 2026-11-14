@@ -18,7 +18,7 @@ static bool was_scope;                     /* Last page actually on the glass. *
 struct Window { int left, right, top, bottom; }; /* x in bytes, y in rows, inclusive */
 static const Window whole={0,STRIDE-1,0,SIDE-1};
 
-enum Refresh { FACTORY, REPAINT, GRAPH };
+enum Refresh { FACTORY, REPAINT, GRAPH, GRAYSCALE };
 static Refresh loaded=FACTORY;
 struct Stats { unsigned full, repaint, fast, skipped, errors, bytes, elapsed, drive; };
 static Stats stats;
@@ -49,7 +49,7 @@ static void window(Window w) {
  * once to remove old traces. The scrolling graph needs only 01 and 10. */
 enum Plane { TARGET, BEFORE, AFTER, QUIET };
 static uint8_t plane_byte(Plane bank, uint8_t old, uint8_t now, bool text, bool wash_all) {
-    if (bank==TARGET) return now;      /* Factory LUT uses ordinary image bits. */
+    if (bank==TARGET) return now;      /* Send this bitmap to the bank verbatim. */
     if (bank==QUIET) return 0;
     uint8_t changed=old^now;
     uint8_t strokes=(bank==BEFORE ? old : now) & changed;
@@ -114,6 +114,13 @@ static void waveform(Refresh mode) {
         lut[1*12]=0x80;             /* 01: white */
         lut[2*12]=0x40;             /* 10: black */
         lut[60]=6;
+    } else if (mode==GRAYSCALE) {
+        /* Start from white. The two RAM bits select how long each pixel
+         * moves toward black. The phases add up across each row. */
+        lut[1*12]=0x40;             /* Light gray: A. */
+        lut[2*12]=0x50;             /* Dark gray:  A+B. */
+        lut[3*12]=0x54;             /* Black:      A+B+C. */
+        lut[60]=2; lut[61]=2; lut[63]=8; /* 2, 4 and 12 frames. Byte 62 repeats A+B. */
     } else {
         lut[1*12]=0xa0;             /* 01: white throughout */
         lut[2*12]=0x50;             /* 10: black throughout */
@@ -131,6 +138,56 @@ static void waveform(Refresh mode) {
     /* Datasheet 0Ch: default drive strengths, 10 ms per booster stage. */
     command(0x0c,{0x8b,0x9c,0x96,0x00});
     loaded=mode;
+}
+
+/* Reload the factory LUT for a full clean, or use the waveform in RAM. */
+static bool activate(Refresh mode) {
+    command(0x22,{(uint8_t)(mode==FACTORY ? 0xf7 : 0xcf)});
+    command(0x20);                 /* The sequence turns off the analog drive. */
+    return wait_level(true,40) && wait_level(false,6000);
+}
+
+static void factory_image(const uint8_t *image) {
+    command(0x3c,{0x05});           /* Clean the border along with the glass. */
+    plane(0x26,TARGET,whole,image);
+    plane(0x24,TARGET,whole,image);
+    command(0x0c,{0x8b,0x9c,0x96,0x0f});
+    loaded=FACTORY;
+}
+
+bool board_sleep_picture(void) {
+    static const char caption[]="touch any button to awake";
+    uint8_t *image=panel.getBuffer();
+    known=false;                    /* A one-bit shadow cannot describe gray. */
+    if (!image || !reset_panel()) return false;
+    panel.setRotation(3); panel.setTextWrap(false);
+    spi.beginTransaction(SPISettings(PAPER_SPI_HZ,MSBFIRST,SPI_MODE0));
+    window(whole);
+    panel.fillScreen(WHITE);
+    /* The original black-and-white waveform gives small letters maximum
+     * contrast. Leave this strip alone during the grayscale exposure. */
+    panel.fillRect(0,180,SIDE,20,BLACK);
+    panel.setTextSize(1); panel.setTextColor(WHITE);
+    panel.setCursor((SIDE-6*(sizeof(caption)-1))/2,186);
+    panel.print(caption);
+    factory_image(image);
+    bool ok=activate(FACTORY);
+    if (ok) {
+        waveform(GRAYSCALE);
+        /* The border electrode surrounds the addressable pixels. Match it
+         * to the dark sky instead of leaving the factory-white edge. */
+        command(0x3c,{0x06});       /* Use the dark-gray row of the LUT. */
+        for (int bit=0;bit<2;bit++) {
+            /* Draw only the photograph. 00 leaves the caption untouched. */
+            panel.fillScreen(0);
+            panel.drawBitmap(0,0,sleep_aircraft[bit],SIDE,180,1);
+            plane(bit==0 ? 0x24 : 0x26,TARGET,whole,image);
+        }
+        ok=activate(GRAYSCALE);
+        if (ok) command(0x10,{0x01});   /* The unpowered glass holds the image. */
+    }
+    spi.endTransaction();
+    return ok;
 }
 
 static Window differences(const uint8_t *image) {
@@ -168,15 +225,6 @@ static void draw_battery(int level) {
 
 static void draw(Screen rows,CardView card,const ScopeView *v,int battery) {
     panel.fillScreen(WHITE);
-    if (card==SLEEP_CARD) {
-        static const char caption[]="touch any button to awake";
-        panel.drawBitmap(0,0,sleep_aircraft,SIDE,186,BLACK);
-        panel.fillRect(0,186,SIDE,14,BLACK);
-        panel.setTextSize(1); panel.setTextColor(WHITE);
-        panel.setCursor((SIDE-6*(sizeof(caption)-1))/2,189);
-        panel.print(caption);
-        return;
-    }
     panel.fillRect(0,0,200,20,BLACK);
     bool plane=card==AIRCRAFT_CARD || card==POSITION_CARD;
     for (int y=0;y<LINES;y++) {
@@ -233,20 +281,14 @@ bool board_paint(Screen rows, CardView card, const ScopeView *scope, int battery
         spi.beginTransaction(SPISettings(PAPER_SPI_HZ,MSBFIRST,SPI_MODE0));
         window(w);
         if (mode==FACTORY) {
-            command(0x3c,{0x05});  /* Factory waveform also cleans the border. */
-            plane(0x26,TARGET,w,image);
-            plane(0x24,TARGET,w,image);
-            command(0x0c,{0x8b,0x9c,0x96,0x0f}); /* Factory soft start. */
-            loaded=FACTORY;
+            factory_image(image);
         } else {
             if (loaded!=mode) waveform(mode);
             plane(0x26,BEFORE,w,image,mode==REPAINT,whole_page);
             plane(0x24,AFTER,w,image,mode==REPAINT,whole_page);
         }
-        command(0x22,{(uint8_t)(mode==FACTORY?0xf7:0xcf)});
         int64_t started=uptime_ms();
-        command(0x20);            /* Each sequence turns off analog drive when done. */
-        ok=wait_level(true,40) && wait_level(false,6000);
+        ok=activate(mode);
         drive=(unsigned)(uptime_ms()-started);
         if (ok) {
             /* Retire every nonzero instruction before the next refresh.
@@ -256,7 +298,6 @@ bool board_paint(Screen rows, CardView card, const ScopeView *scope, int battery
             plane(0x24,QUIET,w,image);
             memcpy(previous,image,sizeof(previous));
             was_scope=graph;
-            if (card==SLEEP_CARD) command(0x10,{0x01}); /* Ink stays visible without drive. */
         }
         spi.endTransaction();
     }

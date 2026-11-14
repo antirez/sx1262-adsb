@@ -204,8 +204,8 @@ static void display_task(void *arg) {
         if (page.card==SLEEP_CARD) {
             /* This task owns the glass. Finish the last waveform before
              * cutting power. A disconnected panel must not drain the cell. */
-            bool ok=board_paint(page.rows,SLEEP_CARD,NULL,page.battery,true);
-            if (!ok) ok=board_paint(page.rows,SLEEP_CARD,NULL,page.battery,true);
+            bool ok=board_sleep_picture();
+            if (!ok) ok=board_sleep_picture();
             board_print(ok?"SXSLEEP paper=1\n":"SXSLEEP paper=0\n");
             board_sleep();
         }

@@ -171,7 +171,9 @@ For the first position the board needs one odd and one even airborne position re
 
 ### Frequency settings and signal graph
 
-The transmit frequency for 1090 MHz ADS-B is fixed. The default **receiver dial is 1089.800 MHz** because that setting placed the aircraft signal in a more sensitive part of this board's receive filter. In settings, **tap** to cycle through increase, decrease, step size, default, discard and clear history. **Hold** to apply the selected action. The radio retunes immediately after a frequency change. **Double-click** to save the frequency across power cycles and return to the aircraft display.
+Aircraft transmit on 1090 MHz. The default **receiver dial is 1089.800 MHz**. Both of our boards picked up weak bench signals better with this offset. On the T-Echo, the response dipped when the signal was close to the dial frequency and recovered on either side. The best dial setting may vary between boards. [T-Echo tuning measurements](docs/techo-tuning.md)
+
+In settings, **tap** to cycle through increase, decrease, step size, default, discard and clear history. **Hold** to apply the selected action. The radio retunes immediately after a frequency change. **Double-click** to save the frequency across power cycles and return to the aircraft display.
 
 To start a new outing with an empty list, tap until **Clear history** appears, then hold the button for 0.8 seconds until **History cleared** appears. This resets the aircraft count and permanently deletes the saved packet recordings on the board, including those available over USB. The separate background power recordings and the tuned frequency are kept.
 

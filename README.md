@@ -20,7 +20,7 @@ These are screenshots from the board. The upper pair shows the same packet three
 | --- | --- | --- |
 | Original T-Echo, nRF52840, SX1262, 1.54-inch monochrome e-paper | [T-Echo firmware (.uf2)](firmware/techo-adsb.uf2) | USB data cable and the board's UF2 drive |
 | T3-S3, ESP32-S3, SX1262, monochrome OLED, 4 MB flash | [T3-S3 firmware and installer (.zip)](firmware/t3s3-adsb.zip) | USB data cable, Python 3 and esptool |
-| T-Beam Supreme SX1262 | No packaged download; [build from source](#t-beam-supreme-sx1262) | USB data cable, ESP-IDF and esptool |
+| T-Beam Supreme SX1262 | No packaged download; [build a package from source](#t-beam-supreme-sx1262) | USB data cable, ESP-IDF, Python 3 and esptool |
 
 On GitHub, use **Download raw file** to save a firmware download. [SHA-256 checksums](firmware/SHA256SUMS) · [Third-party notices](firmware/NOTICES.txt)
 
@@ -38,7 +38,7 @@ The UF2 writes application flash at `0x26000`. Updates preserve the bootloader, 
 2. Connect USB. Hold **BOOT**, tap and release **RESET**, then release **BOOT**. Close any serial monitor.
 3. Run `python install.py`. It finds a single Espressif USB port automatically. With several devices connected, use `python install.py --port COM5` or supply the actual port on your computer. When the write verifies, tap **RESET** if the OLED hasn't started.
 
-When replacing other firmware, the installer first reads all 4 MB of flash into a timestamped backup in the current folder and verifies it against the board. It then clears the area the new receiver will use for recordings. When updating an existing receiver, it writes only the bootloader, partition table and application. The frequency and recordings survive. [Installer source](install/t3s3.py)
+When replacing other firmware, the installer first reads all 4 MB of flash into a timestamped backup in the current folder and verifies it against the board. It then clears the area the new receiver will use for recordings. When updating an existing receiver, it writes only the bootloader, partition table and application. The frequency and recordings survive. [Installer source](install/installer.py)
 
 ## Supported hardware
 
@@ -135,30 +135,17 @@ For **later updates** to this receiver, run the build and flash commands only. T
 
 ### T-Beam Supreme SX1262
 
-Build with a separate build directory and sdkconfig:
+Build with a separate build directory and sdkconfig, then package the installer ZIP:
 
 ```sh
 idf.py -B build-tbeam-supreme \
   -D SDKCONFIG=build-tbeam-supreme/sdkconfig \
   -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.defaults.tbeam-supreme' \
   build
+python install/package.py --board tbeam-supreme
 ```
 
-This profile requires secure boot and flash encryption to be disabled. Close any serial monitor, then connect USB, enter the ROM loader and set `PORT` as described for the T3-S3 above. The command below uses esptool 4.x from the ESP-IDF environment.
-
-Back up existing firmware and data if you want to restore them.
-
-**The next command erases the entire flash, including existing firmware and data.** It writes the bootloader, partition table and application, then verifies the written images:
-
-```sh
-python -m esptool --chip esp32s3 -p "$PORT" --before no_reset --after no_reset write_flash \
-  --erase-all --verify --flash_mode dio --flash_freq 80m --flash_size 8MB \
-  0x0 build-tbeam-supreme/bootloader/bootloader.bin \
-  0x8000 build-tbeam-supreme/partition_table/partition-table.bin \
-  0x10000 build-tbeam-supreme/lilygo_adsb.bin
-```
-
-After verification, tap **RESET** to start the receiver.
+The ZIP is written to `firmware/tbeam-supreme-adsb.zip`. To install it, follow the T3-S3 steps under [Install without compiling](#install-without-compiling), using this ZIP. Use only with the 915 MHz variant; the installer checks for 8 MB flash. Secure boot and flash encryption must be disabled. On first installation it verifies a full-flash backup before erasing the captures partition. Later updates preserve the packet journal and saved frequency.
 
 ## Use the receiver
 

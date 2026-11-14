@@ -129,12 +129,12 @@ void scope_view(const Scope *s, uint32_t hz, int64_t now, ScopeView *v) {
 static const uint32_t steps[]={1000,10000,100000,1000000,10000000};
 static const char *labels[]={"1 kHz","10 kHz","100 kHz","1 MHz","10 MHz"};
 
-void menu_open(Menu *m, uint32_t hz) {
-    *m=(Menu){.open=true,.hz=hz,.step=2,.action=SLEEP_NOW};
+void menu_open(Menu *m, uint32_t hz, Action first) {
+    *m=(Menu){.open=true,.hz=hz,.step=2,.action=first,.first=first};
 }
 
 void menu_next(Menu *m) {
-    m->action=(m->action+1)%(CLEAR_HISTORY+1);
+    m->action=m->action==CLEAR_HISTORY ? m->first : m->action+1;
 }
 
 void menu_adjust(Menu *m) {
@@ -173,7 +173,6 @@ void menu_screen(const Menu *m, const ScopeView *v, const char *message, bool to
         break;
     case SLEEP_NOW:
         strcpy(s[6],"Enter sleep");
-        if (!touch_pad) { strcpy(s[7],"Hold to sleep"); return; }
         break;
     }
     strcpy(s[7],"Tap next 2x save");

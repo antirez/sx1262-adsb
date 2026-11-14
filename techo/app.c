@@ -223,7 +223,7 @@ static void key(Key k) {
         if (k==KEY_TAP) history_older();
         else if (k==KEY_HOLD) history_live();
         else if (k==KEY_DOUBLE) {
-            menu_open(&menu,atomic_load(&requested)); notice=NULL;
+            menu_open(&menu,atomic_load(&requested),SLEEP_NOW); notice=NULL;
             taskENTER_CRITICAL(); memset(&scope,0,sizeof(scope)); taskEXIT_CRITICAL();
             atomic_store(&watching,true);
         }

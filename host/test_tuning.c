@@ -34,9 +34,7 @@ int main(void) {
     CHECK(button_update(&b,false,4000)==KEY_NONE);
 
     Menu m;
-    menu_open(&m,DEFAULT_HZ);
-    CHECK(m.action==SLEEP_NOW);
-    menu_next(&m);
+    menu_open(&m,DEFAULT_HZ,TUNE_UP);
     CHECK(m.action==TUNE_UP);
     menu_adjust(&m);
     CHECK(m.hz==DEFAULT_HZ+100000);
@@ -131,11 +129,17 @@ int main(void) {
     menu_adjust(&m);
     CHECK(m.hz==DEFAULT_HZ);
     menu_next(&m);
+    CHECK(m.action==TUNE_UP);
+    menu_screen(&m,&v,NULL,false,s);
+    CHECK(!*s[5] && !strcmp(s[6],"Hold: +100 kHz"));
+
+    menu_open(&m,DEFAULT_HZ,SLEEP_NOW);
     CHECK(m.action==SLEEP_NOW);
     menu_screen(&m,&v,NULL,true,s);
     CHECK(!strcmp(s[5],"Hold or tap pad") && !strcmp(s[6],"Enter sleep"));
-    menu_screen(&m,&v,NULL,false,s);
-    CHECK(!*s[5] && !strcmp(s[6],"Enter sleep") && !strcmp(s[7],"Hold to sleep"));
+    m.action=CLEAR_HISTORY;
+    menu_next(&m);
+    CHECK(m.action==SLEEP_NOW);
     menu_next(&m);
     CHECK(m.action==TUNE_UP);
     return 0;

@@ -388,9 +388,12 @@ static void field_task(void *unused) {
 void app_main(void) {
     boot_id=esp_random();
     load_dial();
+    /* The decoder's trellis workspace needs one large internal block. Take
+     * it before the queues split the heap. */
+    bool decoder_ok=decoder_init(report);
     captures=xQueueCreate(QUEUE_DEPTH,sizeof(Capture));
     results=xQueueCreate(16,sizeof(Result));
-    ESP_ERROR_CHECK(captures && results && decoder_init(report) ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(captures && results && decoder_ok ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(decoder_self_test() ? ESP_OK : ESP_ERR_INVALID_RESPONSE);
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(field_task,"field",12288,NULL,3,NULL,0)==pdPASS
                     ? ESP_OK : ESP_ERR_NO_MEM);

@@ -6,6 +6,7 @@
 #include <Adafruit_GFX.h>
 #include <initializer_list>
 #include "board.h"
+#include "aircraft.h"
 
 enum { SIDE=200, STRIDE=SIDE/8, CS=30, DC=28, RESET_PIN=2, BUSY=3,
        PAPER_SPI_HZ=8000000, BLACK=0, WHITE=1 };
@@ -148,7 +149,7 @@ static Window differences(const uint8_t *image) {
 static int signal_y(unsigned code) {
     if (code<80) code=80;
     if (code>240) code=240;
-    return 53+(int)(code-80)*80/160;
+    return 53+(int)(code-80)*68/160;  /* The control legend starts at y=128. */
 }
 enum { BATTERY_X=174 };
 static void draw_battery(int level) {
@@ -167,6 +168,15 @@ static void draw_battery(int level) {
 
 static void draw(Screen rows,CardView card,const ScopeView *v,int battery) {
     panel.fillScreen(WHITE);
+    if (card==SLEEP_CARD) {
+        static const char caption[]="touch any button to awake";
+        panel.drawBitmap(0,0,sleep_aircraft,SIDE,186,BLACK);
+        panel.fillRect(0,186,SIDE,14,BLACK);
+        panel.setTextSize(1); panel.setTextColor(WHITE);
+        panel.setCursor((SIDE-6*(sizeof(caption)-1))/2,189);
+        panel.print(caption);
+        return;
+    }
     panel.fillRect(0,0,200,20,BLACK);
     bool plane=card==AIRCRAFT_CARD || card==POSITION_CARD;
     for (int y=0;y<LINES;y++) {
@@ -246,6 +256,7 @@ bool board_paint(Screen rows, CardView card, const ScopeView *scope, int battery
             plane(0x24,QUIET,w,image);
             memcpy(previous,image,sizeof(previous));
             was_scope=graph;
+            if (card==SLEEP_CARD) command(0x10,{0x01}); /* Ink stays visible without drive. */
         }
         spi.endTransaction();
     }

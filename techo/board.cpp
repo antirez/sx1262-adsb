@@ -8,13 +8,17 @@ extern "C" {
 #include "radio_bus.h"
 }
 
-enum { POWER=12, BUTTON=42, VBAT=4, RF_CS=24, RF_RESET=25, RF_BUSY=17,
+enum { POWER=12, BUTTON=42, TOUCH=11, GPS_WAKE=34, VBAT=4, RF_CS=24, RF_RESET=25, RF_BUSY=17,
        LIGHT=43 };
 static SPIClass rf(NRF_SPIM3,23,19,22);
 
 void board_begin(void) {
+    /* The Quectel L76K enters standby while WAKEUP is low. Do this before
+     * enabling the peripheral supply and keep it low throughout reception. */
+    digitalWrite(GPS_WAKE,LOW); pinMode(GPS_WAKE,OUTPUT);
     pinMode(POWER,OUTPUT); digitalWrite(POWER,HIGH);
     pinMode(BUTTON,INPUT_PULLUP);
+    pinMode(TOUCH,INPUT);  /* TTP223 drives this pin high while touched. */
     pinMode(LIGHT,OUTPUT); digitalWrite(LIGHT,LOW);
     analogReference(AR_INTERNAL_3_0);
     analogReadResolution(12);
@@ -52,6 +56,25 @@ void board_read_battery(Battery *battery, int64_t now) {
 
 void board_bootloader(void) { enterUf2Dfu(); }
 bool board_button(void) { return digitalRead(BUTTON)==LOW; }
+bool board_touch(void) { return digitalRead(TOUCH)==HIGH; }
+void board_sleep(void) {
+    /* Leave PWR_ON asserted. Removing the battery supply would also remove
+     * our means of waking by touch. GPS, radio and e-paper sleep separately. */
+    /* SENSE is level-triggered. Release the finger that chose Sleep before
+     * arming it, or SYSTEMOFF would immediately boot the receiver again. */
+    unsigned released=0;
+    while (released<4) {
+        delay(10);
+        released=board_button() || board_touch() ? 0 : released+1;
+    }
+    pinMode(TOUCH,INPUT_SENSE_HIGH);   /* TTP223 is powered from the nRF rail. */
+    /* System OFF wakes through reset. Our user button is also the factory
+     * bootloader's DFU button. Its one-shot SKIP cookie tells it to run the
+     * receiver even if the user is still pressing that button on wake. */
+    NRF_POWER->GPREGRET=0x6d;
+    systemOff(BUTTON,LOW);            /* Also arms the side button's pull-up and SENSE. */
+    for (;;) __WFE();                 /* SYSTEMOFF can return under a hardware debugger. */
+}
 int board_getchar(void) { return Serial.available() ? Serial.read() : -1; }
 void board_print(const char *text) { if (Serial) Serial.print(text); }
 

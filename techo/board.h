@@ -9,8 +9,10 @@ int64_t uptime_ms(void);
 uint32_t board_random(void);
 int board_free_heap(void);
 bool board_button(void);
+bool board_touch(void);
 void board_begin(void);
 void board_bootloader(void);
+void board_sleep(void);
 /* On battery, level is the number of filled bars. */
 enum { BATTERY_USB=-2, BATTERY_UNKNOWN=-1, BATTERY_BARS=4 };
 typedef struct { unsigned mv; int level; } Battery;

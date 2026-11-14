@@ -7,6 +7,7 @@ enum { SCAN_ARMED = 0x0f, SCAN_COMPLETE = 0xff, SCAN_WORDS = 386 };
 uint32_t sampler_word(unsigned index, bool test);
 int radio_bus_init(void);
 int radio_start(bool test);
+int radio_sleep(void);
 int radio_tune(uint32_t hz);
 int radio_rssi(uint8_t *code);
 int radio_self_test(void);

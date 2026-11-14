@@ -9,9 +9,12 @@
 #include "display.h"
 #include "storage.h"
 #include "tuning.h"
+#include "sleep.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#include "esp_sleep.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -31,6 +34,7 @@ static QueueHandle_t captures, results;
 static uint32_t boot_id;
 static atomic_uint bursts, polls, restarts, full_queue, high_water, max_rearm_us, deferred, filtered;
 static atomic_bool ready;
+static SleepControl sleep_control;
 static int64_t now_ms(void) { return esp_timer_get_time()/1000; }
 
 static void wake_radio(void *task) { xTaskNotifyGive((TaskHandle_t)task); }
@@ -110,6 +114,7 @@ static esp_err_t listen(void) {
     int64_t last_armed=now_ms(), calibrated=last_armed;
     while (true) {
         ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+        bool stopping=atomic_load(&sleep_control.phase)==STOP_RADIO;
         uint8_t state;
         err=radio_state(&state);
         if (err!=ESP_OK) return err;
@@ -129,7 +134,7 @@ static esp_err_t listen(void) {
         /* Start the next capture before spending time on this one. At a
          * frequency change preserve the old capture's dial and floor until
          * the queue has copied them. */
-        if (state==SCAN_COMPLETE && !recalibrate) {
+        if (state==SCAN_COMPLETE && !recalibrate && !stopping) {
             if ((err=radio_arm(c.threshold))!=ESP_OK) return err;
         }
         int64_t rearmed=esp_timer_get_time();
@@ -145,6 +150,7 @@ static esp_err_t listen(void) {
                 if (depth>atomic_load(&high_water)) atomic_store(&high_water,depth);
             }
         }
+        if (stopping) return ESP_OK;  /* The decoder now owns the last completed waveform. */
         if (recalibrate) {
             if (state==SCAN_ARMED && (err=radio_finish())!=ESP_OK) return err;
             err=arm_channel(&c);
@@ -168,8 +174,18 @@ static void radio_task(void *unused) {
     ESP_ERROR_CHECK(esp_timer_create(&args,&timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer,250));
     while (true) {
+        if (atomic_load(&sleep_control.phase)==STOP_RADIO) {
+            ESP_ERROR_CHECK(esp_timer_stop(timer));
+            esp_err_t err=radio_sleep();
+            if (err!=ESP_OK) printf("SXERROR radio sleep %s\n",esp_err_to_name(err));
+            atomic_store(&ready,false);
+            sleep_radio_stopped(&sleep_control,now_ms());
+            while (atomic_load(&sleep_control.phase)!=LISTENING) vTaskDelay(pdMS_TO_TICKS(10));
+            ESP_ERROR_CHECK(esp_timer_start_periodic(timer,250));
+        }
         esp_err_t err=radio_self_test();
         if (err==ESP_OK) err=listen();
+        if (atomic_load(&sleep_control.phase)==STOP_RADIO) continue;
         atomic_store(&ready,false);
         atomic_fetch_add(&restarts,1);
         printf("SXERROR radio %s\n",esp_err_to_name(err));
@@ -189,8 +205,11 @@ static void report(const Result *r) {
 static void decode_task(void *unused) {
     Capture c;
     while (true) {
+        bool stopped=atomic_load(&sleep_control.phase)==RADIO_STOPPED;
+        int64_t now=now_ms();
         if (xQueueReceive(captures,&c,0)) decoder_capture(&c);
-        else if (!decoder_idle(now_ms())) {
+        else if (!decoder_idle(now)) {
+            if (stopped) sleep_decoder_idle(&sleep_control,now);
             atomic_fetch_add(&idle_polls,1);
             if (xQueueReceive(captures,&c,pdMS_TO_TICKS(10))) decoder_capture(&c);
         }
@@ -240,7 +259,10 @@ static void handle_key(Key key) {
         finish_save();
     } else if (key==KEY_TAP) menu_next(&menu);
     else if (key==KEY_HOLD || key==KEY_REPEAT) {
-        if (menu.action==DISCARD) {
+        if (menu.action==SLEEP_NOW) {
+            sleep_control.manual=true;
+            close_menu();
+        } else if (menu.action==DISCARD) {
             atomic_store(&requested_hz,saved_hz);
             close_menu();
         } else if (menu.action==CLEAR_HISTORY) {
@@ -262,7 +284,25 @@ static void handle_key(Key key) {
 
 static void button(void) {
     static Button b;
-    handle_key(button_update(&b,!gpio_get_level(BOOT_BUTTON),now_ms()));
+    static bool released;
+    bool pressed=!gpio_get_level(BOOT_BUTTON);
+    if (!pressed) released=true;
+    handle_key(button_update(&b,released && pressed,now_ms()));
+}
+
+static void power_down(bool oled) {
+    /* The OLED needs current to hold an image. Turn its charge pump off.
+     * GPIO0 belongs to the RTC domain in deep sleep and wakes on a press. */
+    if (oled) display_sleep();
+    unsigned released=0;
+    while (released<4) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        released=gpio_get_level(BOOT_BUTTON) ? released+1 : 0;
+    }
+    ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(BOOT_BUTTON,0));
+    ESP_ERROR_CHECK(rtc_gpio_pullup_en(BOOT_BUTTON));
+    ESP_ERROR_CHECK(rtc_gpio_pulldown_dis(BOOT_BUTTON));
+    esp_deep_sleep_start();
 }
 
 /* USB stays useful in the field without a Python REPL. Commands are lines.
@@ -314,6 +354,8 @@ static void field_task(void *unused) {
     bool oled=display_init()==ESP_OK, screen_ok=oled;
     history_set_boot(boot_id);
     if (mounted) storage_restore();
+    if (esp_sleep_get_wakeup_cause()==ESP_SLEEP_WAKEUP_EXT0)
+        ESP_ERROR_CHECK(rtc_gpio_deinit(BOOT_BUTTON));
     gpio_config_t pin={.pin_bit_mask=1ULL<<BOOT_BUTTON,.mode=GPIO_MODE_INPUT,.pull_up_en=true};
     ESP_ERROR_CHECK(gpio_config(&pin));
     int64_t last_save=-30000, last_draw=-1000, last_clock=now_ms();
@@ -323,6 +365,7 @@ static void field_task(void *unused) {
         bool redraw=false;
         /* A waveform captured before Clear can finish decoding afterwards. */
         if (xQueueReceive(results,&r,pdMS_TO_TICKS(10)) && r.capture.last_ms>cleared_through_ms) {
+            sleep_received(&sleep_control,&r);
             int64_t now=now_ms();
             if (r.length && !r.evidence_index) {
                 Card c={.boot=boot_id,.ms=r.capture.last_ms,.length=r.length};
@@ -350,6 +393,8 @@ static void field_task(void *unused) {
         console(screen_ok);
         finish_save();
         int64_t now=now_ms();
+        bool drained=atomic_load(&sleep_control.phase)==DECODER_DRAINED && !uxQueueMessagesWaiting(results);
+        if (sleep_due(&sleep_control,now,drained)) power_down(oled);
         if (oled && (redraw || now-last_draw>=100)) {
             Screen s;
             if (menu.open) {
@@ -365,7 +410,7 @@ static void field_task(void *unused) {
                 scope_view(&snapshot,menu.hz,now,&view);
                 const char *message=menu_message;
                 if (menu.hz!=atomic_load(&applied_hz)) message="Tuning...";
-                menu_screen(&menu,&view,message,s);
+                menu_screen(&menu,&view,message,false,s);
                 screen_ok=display_draw(s,NO_CARD,NULL,&view)==ESP_OK;
             } else {
                 CardView card=history_screen(s,boot_id,now);
@@ -386,6 +431,7 @@ static void field_task(void *unused) {
 }
 
 void app_main(void) {
+    sleep_control.last_packet=now_ms();
     boot_id=esp_random();
     load_dial();
     captures=xQueueCreate(QUEUE_DEPTH,sizeof(Capture));

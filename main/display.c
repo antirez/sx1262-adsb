@@ -26,6 +26,11 @@ esp_err_t display_init(void) {
     return send(init,sizeof(init));
 }
 
+void display_sleep(void) {
+    const uint8_t off[]={0,0xae,0x8d,0x10};  /* Display off, charge pump off. */
+    send(off,sizeof(off));
+}
+
 static void draw_trace(const uint8_t *raw) {
     int lo=255, hi=0;
     for (int i=0; i<SAMPLES; i++) {

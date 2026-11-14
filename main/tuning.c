@@ -134,7 +134,7 @@ void menu_open(Menu *m, uint32_t hz) {
 }
 
 void menu_next(Menu *m) {
-    m->action=(m->action+1)%(CLEAR_HISTORY+1);
+    m->action=(m->action+1)%(SLEEP_NOW+1);
 }
 
 void menu_adjust(Menu *m) {
@@ -145,11 +145,12 @@ void menu_adjust(Menu *m) {
     case STEP_SIZE: m->step=(m->step+1)%(sizeof(steps)/sizeof(*steps)); break;
     case DEFAULT_FREQ: m->hz=DEFAULT_HZ; break;
     case DISCARD:
-    case CLEAR_HISTORY: break;  /* The field task handles these actions. */
+    case CLEAR_HISTORY:
+    case SLEEP_NOW: break;  /* The field task handles these actions. */
     }
 }
 
-void menu_screen(const Menu *m, const ScopeView *v, const char *message, Screen s) {
+void menu_screen(const Menu *m, const ScopeView *v, const char *message, bool touch_pad, Screen s) {
     memset(s,0,sizeof(Screen));
     unsigned mhz=m->hz/1000000, khz=m->hz/1000%1000;
     snprintf(s[0],17,"RX %u.%03u MHz",mhz,khz);
@@ -158,16 +159,19 @@ void menu_screen(const Menu *m, const ScopeView *v, const char *message, Screen 
     else if (v->level>=0 && v->strongest>=0)
         snprintf(s[1],17,"A-%u P-%u dBm",((uint8_t)v->level+1u)/2,((uint8_t)v->strongest+1u)/2);
     else strcpy(s[1],"Reading RSSI...");
+    const char *hold=touch_pad?"":"Hold: ";
+    if (touch_pad) strcpy(s[5],"Hold or tap pad");
     switch (m->action) {
-    case TUNE_UP: snprintf(s[6],17,"Hold: +%s",labels[m->step]); break;
-    case TUNE_DOWN: snprintf(s[6],17,"Hold: -%s",labels[m->step]); break;
-    case STEP_SIZE: snprintf(s[6],17,"Hold: step %s",labels[m->step]); break;
-    case DEFAULT_FREQ: strcpy(s[6],"Hold: default"); break;
-    case DISCARD: strcpy(s[6],"Hold: discard"); break;
+    case TUNE_UP: snprintf(s[6],17,"%s+%s",hold,labels[m->step]); break;
+    case TUNE_DOWN: snprintf(s[6],17,"%s-%s",hold,labels[m->step]); break;
+    case STEP_SIZE: snprintf(s[6],17,"%sstep %s",hold,labels[m->step]); break;
+    case DEFAULT_FREQ: snprintf(s[6],17,"%sdefault",hold); break;
+    case DISCARD: snprintf(s[6],17,"%sdiscard",hold); break;
     case CLEAR_HISTORY:
         strcpy(s[6],"Clear history");
-        strcpy(s[7],"Hold to erase");
-        return;
+        if (!touch_pad) { strcpy(s[7],"Hold to erase"); return; }
+        break;
+    case SLEEP_NOW: snprintf(s[6],17,"%sSleep",hold); break;
     }
     strcpy(s[7],"Tap next 2x save");
 }

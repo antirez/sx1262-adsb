@@ -11,7 +11,7 @@ typedef struct {
 } Card;
 
 typedef char Screen[LINES][COLUMNS+1];
-typedef enum { NO_CARD, TEST_CARD, AIRCRAFT_CARD, POSITION_CARD } CardView;
+typedef enum { NO_CARD, TEST_CARD, AIRCRAFT_CARD, POSITION_CARD, SLEEP_CARD } CardView;
 void history_add(Card c);
 void history_clear(void);
 void history_set_boot(uint32_t boot);

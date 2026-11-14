@@ -1,4 +1,4 @@
-/* LilyGO T3-S3 / SX1262 passive Mode S receiver.
+/* LilyGO ESP32-S3 / SX1262 passive Mode S receiver.
  *
  * Core 0 owns the radio. It polls for a finished capture, copies it, and
  * rearms. Core 1 runs the decoder. Neither side shares a mutable waveform:
@@ -7,6 +7,7 @@
 #include "receiver.h"
 #include "radio.h"
 #include "display.h"
+#include "board_power.h"
 #include "storage.h"
 #include "tuning.h"
 #include "nvs.h"
@@ -386,6 +387,7 @@ static void field_task(void *unused) {
 }
 
 void app_main(void) {
+    ESP_ERROR_CHECK(board_power_init());
     boot_id=esp_random();
     load_dial();
     captures=xQueueCreate(QUEUE_DEPTH,sizeof(Capture));

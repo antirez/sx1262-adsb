@@ -1,28 +1,71 @@
-/* The SSD1306 has eight pages of 128 bytes. Each byte is a vertical column
+/* The OLED controller has eight pages of 128 bytes. Each byte is a vertical column
  * of eight pixels, exactly the layout of the font, so text needs no canvas
  * library. Send a new screen only when something on it actually changed. */
 #include "display.h"
 #include "font8x8.h"
+#include "sdkconfig.h"
 #include "driver/i2c.h"
 #include <stdio.h>
 #include <string.h>
 
 static const i2c_port_t bus = I2C_NUM_0;
+static uint8_t display_address = 0x3c;
 static uint8_t image[1+128*8], previous[128*8];
 static bool painted;
 
 static esp_err_t send(const uint8_t *bytes, size_t count) {
-    return i2c_master_write_to_device(bus,0x3c,bytes,count,pdMS_TO_TICKS(100));
+    return i2c_master_write_to_device(bus,display_address,bytes,count,pdMS_TO_TICKS(100));
 }
 
+#ifdef CONFIG_ADSB_BOARD_TBEAM_SUPREME_SX1262
+static esp_err_t probe_display(uint8_t address) {
+    i2c_cmd_handle_t command = i2c_cmd_link_create();
+    if (!command) return ESP_ERR_NO_MEM;
+    esp_err_t err = i2c_master_start(command);
+    if (err == ESP_OK)
+        err = i2c_master_write_byte(command,(address<<1)|I2C_MASTER_WRITE,true);
+    if (err == ESP_OK) err = i2c_master_stop(command);
+    if (err == ESP_OK) err = i2c_master_cmd_begin(bus,command,pdMS_TO_TICKS(100));
+    i2c_cmd_link_delete(command);
+    return err;
+}
+
+static esp_err_t select_display_address(void) {
+    esp_err_t err = probe_display(0x3d);
+    if (err == ESP_OK) {
+        display_address = 0x3d;
+        return ESP_OK;
+    }
+    if (err != ESP_FAIL) return err;
+    err = probe_display(0x3c);
+    if (err == ESP_OK) {
+        display_address = 0x3c;
+        return ESP_OK;
+    }
+    return err == ESP_FAIL ? ESP_ERR_NOT_FOUND : err;
+}
+#endif
+
 esp_err_t display_init(void) {
+#ifdef CONFIG_ADSB_BOARD_TBEAM_SUPREME_SX1262
+    i2c_config_t cfg = {.mode=I2C_MODE_MASTER,.sda_io_num=17,.scl_io_num=18,
+        .sda_pullup_en=true,.scl_pullup_en=true,.master.clk_speed=400000};
+#else
     i2c_config_t cfg = {.mode=I2C_MODE_MASTER,.sda_io_num=18,.scl_io_num=17,
         .sda_pullup_en=true,.scl_pullup_en=true,.master.clk_speed=400000};
+#endif
     esp_err_t err = i2c_param_config(bus,&cfg);
     if (err==ESP_OK) err = i2c_driver_install(bus,cfg.mode,0,0,0);
     if (err!=ESP_OK) return err;
+#ifdef CONFIG_ADSB_BOARD_TBEAM_SUPREME_SX1262
+    err = select_display_address();
+    if (err != ESP_OK) return err;
+    const uint8_t init[] = {0,0xae,0xd5,0x80,0xa8,63,0xd3,0,0x40,0xad,0x8b,
+        0xa1,0xc8,0xda,0x12,0x81,0x80,0xd9,0x22,0xdb,0x35,0xa4,0xa6,0xaf};
+#else
     const uint8_t init[] = {0,0xae,0x20,0,0x40,0xa1,0xc8,0xa8,63,0xd3,0,
         0xda,0x12,0xd5,0x80,0xd9,0xf1,0xdb,0x30,0x81,0xcf,0xa4,0xa6,0x8d,0x14,0xaf};
+#endif
     return send(init,sizeof(init));
 }
 
@@ -119,9 +162,23 @@ esp_err_t display_draw(Screen rows, CardView card, const uint8_t *trace, const S
     if (trace) draw_trace(trace);
     if (scope) draw_scope(scope);
     if (painted && !memcmp(previous,image+1,sizeof(previous))) return ESP_OK;
+#ifdef CONFIG_ADSB_BOARD_TBEAM_SUPREME_SX1262
+    esp_err_t err = ESP_OK;
+    uint8_t page_data[1+128];
+    page_data[0] = 0x40;
+    for (unsigned page=0; page<8 && err==ESP_OK; page++) {
+        const uint8_t address[] = {0,(uint8_t)(0xb0|page),0x02,0x10};
+        err=send(address,sizeof(address));
+        if (err==ESP_OK) {
+            memcpy(page_data+1,image+1+128*page,128);
+            err=send(page_data,sizeof(page_data));
+        }
+    }
+#else
     const uint8_t address[] = {0,0x21,0,127,0x22,0,7};
     esp_err_t err=send(address,sizeof(address));
     if (err==ESP_OK) err=send(image,sizeof(image));
+#endif
     if (err==ESP_OK) { memcpy(previous,image+1,sizeof(previous)); painted=true; }
     return err;
 }

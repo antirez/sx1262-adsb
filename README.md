@@ -144,7 +144,7 @@ To sleep immediately, double-click the user button. Settings opens on **Enter sl
 | T-Echo | The e-paper holds the aircraft picture with the front light off. | Tap the top pad or press the side user button. |
 | T3-S3 | The OLED and its charge pump switch off. | Press BOOT. |
 
-<img src="docs/techo-sleep-panel.jpg" width="280" alt="iPhone photograph of the sleeping T-Echo. A passenger jet flies over Mount Etna. The bottom strip reads touch any button to awake.">
+<img src="docs/techo-sleep-panel.jpg" width="280" alt="iPhone photograph of the sleeping T-Echo. A passenger jet flies over Mount Etna. Two lines of bold white text read touch any button to awake.">
 
 The photograph shows the ink on the sleeping board. [View the 200 × 200 image sent to the display](docs/techo-sleep.png).
 

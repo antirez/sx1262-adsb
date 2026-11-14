@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
+#include <Fonts/FreeSansBold12pt7b.h>
 #include <initializer_list>
 #include "board.h"
 #include "aircraft.h"
@@ -156,7 +157,9 @@ static void factory_image(const uint8_t *image) {
 }
 
 bool board_sleep_picture(void) {
-    static const char caption[]="touch any button to awake";
+    static const char *const lines[]={"touch any","button to awake"};
+    enum { FOOTER=54, PHOTO=SIDE-FOOTER, ART_ROWS=sizeof(sleep_aircraft[0])/STRIDE };
+    static_assert(PHOTO<=ART_ROWS,"Sleep picture is too short for the display");
     uint8_t *image=panel.getBuffer();
     known=false;                    /* A one-bit shadow cannot describe gray. */
     if (!image || !reset_panel()) return false;
@@ -164,12 +167,21 @@ bool board_sleep_picture(void) {
     spi.beginTransaction(SPISettings(PAPER_SPI_HZ,MSBFIRST,SPI_MODE0));
     window(whole);
     panel.fillScreen(WHITE);
-    /* The original black-and-white waveform gives small letters maximum
-     * contrast. Leave this strip alone during the grayscale exposure. */
-    panel.fillRect(0,180,SIDE,20,BLACK);
+    /* Draw the caption with the factory waveform for full contrast. The
+     * font has descenders, so measure the ink when spacing the two lines. */
+    panel.fillRect(0,PHOTO,SIDE,FOOTER,BLACK);
+    panel.setFont(&FreeSansBold12pt7b);
     panel.setTextSize(1); panel.setTextColor(WHITE);
-    panel.setCursor((SIDE-6*(sizeof(caption)-1))/2,186);
-    panel.print(caption);
+    int top=PHOTO+5;
+    for (const char *line : lines) {
+        int16_t x,y;
+        uint16_t w,h;
+        panel.getTextBounds(line,0,0,&x,&y,&w,&h);
+        panel.setCursor((SIDE-w)/2-x,top-y);
+        panel.print(line);
+        top+=h+3;
+    }
+    panel.setFont(nullptr);
     factory_image(image);
     bool ok=activate(FACTORY);
     if (ok) {
@@ -178,9 +190,11 @@ bool board_sleep_picture(void) {
          * to the dark sky instead of leaving the factory-white edge. */
         command(0x3c,{0x06});       /* Use the dark-gray row of the LUT. */
         for (int bit=0;bit<2;bit++) {
-            /* Draw only the photograph. 00 leaves the caption untouched. */
+            /* Crop the sky and foreground equally. Copy whole dithered rows
+             * so the gray pattern survives. 00 leaves the caption untouched. */
             panel.fillScreen(0);
-            panel.drawBitmap(0,0,sleep_aircraft[bit],SIDE,180,1);
+            const uint8_t *photo=sleep_aircraft[bit]+((ART_ROWS-PHOTO)/2)*STRIDE;
+            panel.drawBitmap(0,0,photo,SIDE,PHOTO,1);
             plane(bit==0 ? 0x24 : 0x26,TARGET,whole,image);
         }
         ok=activate(GRAYSCALE);

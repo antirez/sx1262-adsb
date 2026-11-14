@@ -133,6 +133,12 @@ int main(void) {
     menu_screen(&m,&v,NULL,false,s);
     CHECK(!*s[5] && !strcmp(s[6],"Hold: +100 kHz"));
 
+    menu_next(&m);
+    menu_next(&m);
+    CHECK(m.action==STEP_SIZE);
+    menu_screen(&m,&v,NULL,false,s);
+    CHECK(!strcmp(s[6],"Step: 100 kHz") && !strcmp(s[7],"Hold to change"));
+
     menu_open(&m,DEFAULT_HZ,SLEEP_NOW);
     CHECK(m.action==SLEEP_NOW);
     menu_screen(&m,&v,NULL,true,s);

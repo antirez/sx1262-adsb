@@ -164,7 +164,10 @@ void menu_screen(const Menu *m, const ScopeView *v, const char *message, bool to
     switch (m->action) {
     case TUNE_UP: snprintf(s[6],17,"%s+%s",hold,labels[m->step]); break;
     case TUNE_DOWN: snprintf(s[6],17,"%s-%s",hold,labels[m->step]); break;
-    case STEP_SIZE: snprintf(s[6],17,"%sstep %s",hold,labels[m->step]); break;
+    case STEP_SIZE:
+        snprintf(s[6],17,"Step: %s",labels[m->step]);
+        if (!touch_pad) { strcpy(s[7],"Hold to change"); return; }
+        break;
     case DEFAULT_FREQ: snprintf(s[6],17,"%sdefault",hold); break;
     case DISCARD: snprintf(s[6],17,"%sdiscard",hold); break;
     case CLEAR_HISTORY:

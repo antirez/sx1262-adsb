@@ -34,7 +34,8 @@ int main(void) {
     CHECK(button_update(&b,false,4000)==KEY_NONE);
 
     Menu m;
-    menu_open(&m,DEFAULT_HZ);
+    menu_open(&m,DEFAULT_HZ,TUNE_UP);
+    CHECK(m.action==TUNE_UP);
     menu_adjust(&m);
     CHECK(m.hz==DEFAULT_HZ+100000);
     menu_next(&m);
@@ -86,7 +87,7 @@ int main(void) {
     scope_sample(&scope,m.hz,200,185,&burst);
     scope_view(&scope,m.hz,210,&v);
     CHECK(v.zoom && v.block==43 && v.wave_peak==173 && v.wave[30]==173);
-    menu_screen(&m,&v,NULL,s);
+    menu_screen(&m,&v,NULL,false,s);
     CHECK(!strcmp(s[1],"Hold -87 dBm"));
 
     /* A stronger envelope during the hold cannot change a pixel or move
@@ -115,7 +116,7 @@ int main(void) {
     scope_view(&scope,m.hz+100000,5100,&v);
     CHECK(v.level==200 && v.strongest==200 && v.samples==1);
     CHECK(!v.zoom && !v.triggers && v.burst_peak[127]==255);
-    menu_screen(&m,&v,NULL,s);
+    menu_screen(&m,&v,NULL,false,s);
     CHECK(!strcmp(s[0],"RX 1089.800 MHz") && !strcmp(s[1],"A-100 P-100 dBm"));
     scope_sample(&scope,m.hz+100000,5101,200,&burst);
     scope_view(&scope,m.hz+100000,5101,&v);
@@ -123,10 +124,28 @@ int main(void) {
     m.action=DISCARD;
     menu_next(&m);
     CHECK(m.action==CLEAR_HISTORY);
-    menu_screen(&m,&v,NULL,s);
+    menu_screen(&m,&v,NULL,false,s);
     CHECK(!strcmp(s[6],"Clear history") && !strcmp(s[7],"Hold to erase"));
     menu_adjust(&m);
     CHECK(m.hz==DEFAULT_HZ);
+    menu_next(&m);
+    CHECK(m.action==TUNE_UP);
+    menu_screen(&m,&v,NULL,false,s);
+    CHECK(!*s[5] && !strcmp(s[6],"Hold: +100 kHz"));
+
+    menu_next(&m);
+    menu_next(&m);
+    CHECK(m.action==STEP_SIZE);
+    menu_screen(&m,&v,NULL,false,s);
+    CHECK(!strcmp(s[6],"Step: 100 kHz") && !strcmp(s[7],"Hold to change"));
+
+    menu_open(&m,DEFAULT_HZ,SLEEP_NOW);
+    CHECK(m.action==SLEEP_NOW);
+    menu_screen(&m,&v,NULL,true,s);
+    CHECK(!strcmp(s[5],"Hold or tap pad") && !strcmp(s[6],"Enter sleep"));
+    m.action=CLEAR_HISTORY;
+    menu_next(&m);
+    CHECK(m.action==SLEEP_NOW);
     menu_next(&m);
     CHECK(m.action==TUNE_UP);
     return 0;

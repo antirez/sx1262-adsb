@@ -30,14 +30,14 @@ typedef struct {
     unsigned samples, columns, triggers;
     int level, strongest;
 } ScopeView;
-typedef enum { TUNE_UP, TUNE_DOWN, STEP_SIZE, DEFAULT_FREQ, DISCARD, CLEAR_HISTORY } Action;
-typedef struct { uint32_t hz; unsigned step; Action action; bool open; } Menu;
+typedef enum { SLEEP_NOW, TUNE_UP, TUNE_DOWN, STEP_SIZE, DEFAULT_FREQ, DISCARD, CLEAR_HISTORY } Action;
+typedef struct { uint32_t hz; unsigned step; Action action, first; bool open; } Menu;
 
 Key button_update(Button *b, bool pressed, int64_t now);
 void scope_sample(Scope *scope, uint32_t hz, int64_t now, uint8_t rssi, const Capture *burst);
 void scope_view(const Scope *scope, uint32_t hz, int64_t now, ScopeView *view);
-void menu_open(Menu *menu, uint32_t hz);
+void menu_open(Menu *menu, uint32_t hz, Action first);
 void menu_next(Menu *menu);
 void menu_adjust(Menu *menu);
-void menu_screen(const Menu *menu, const ScopeView *view, const char *message, Screen rows);
+void menu_screen(const Menu *menu, const ScopeView *view, const char *message, bool touch_pad, Screen rows);
 #endif

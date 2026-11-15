@@ -9,13 +9,16 @@ int64_t uptime_ms(void);
 uint32_t board_random(void);
 int board_free_heap(void);
 bool board_button(void);
+bool board_touch(void);
 void board_begin(void);
 void board_bootloader(void);
+void board_sleep(void);
 /* On battery, level is the number of filled bars. */
 enum { BATTERY_USB=-2, BATTERY_UNKNOWN=-1, BATTERY_BARS=4 };
 typedef struct { unsigned mv; int level; } Battery;
 void board_read_battery(Battery *battery, int64_t now);
 bool board_paint(Screen s, CardView card, const ScopeView *scope, int battery, bool clean);
+bool board_sleep_picture(void);
 void board_paper_status(void);
 int board_getchar(void);
 void board_print(const char *text);

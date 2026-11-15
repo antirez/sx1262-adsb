@@ -223,7 +223,7 @@ static void handle_key(Key key) {
         if (key==KEY_TAP) history_older();
         if (key==KEY_HOLD) history_live();
         if (key==KEY_DOUBLE) {
-            menu_open(&menu,atomic_load(&requested_hz));
+            menu_open(&menu,atomic_load(&requested_hz),TUNE_UP);
             portENTER_CRITICAL(&scope_lock);
             memset(&scope,0,sizeof(scope));
             portEXIT_CRITICAL(&scope_lock);
@@ -365,7 +365,7 @@ static void field_task(void *unused) {
                 scope_view(&snapshot,menu.hz,now,&view);
                 const char *message=menu_message;
                 if (menu.hz!=atomic_load(&applied_hz)) message="Tuning...";
-                menu_screen(&menu,&view,message,s);
+                menu_screen(&menu,&view,message,false,s);
                 screen_ok=display_draw(s,NO_CARD,NULL,&view)==ESP_OK;
             } else {
                 CardView card=history_screen(s,boot_id,now);

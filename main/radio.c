@@ -63,6 +63,17 @@ static int tune(uint32_t hz) {
     return (rx[2]||rx[3]) ? RADIO_BAD_RESPONSE : 0;
 }
 
+/* Reset also stops a running spectral scan. After cold sleep the normal
+ * startup path reloads the sampler and rechecks the radio from scratch. */
+int radio_sleep(void) {
+    radio_reset_pin(false); radio_delay_us(500);
+    radio_reset_pin(true); radio_delay_us(1000);
+    TRY(CMD(0x80,0));              /* Standby RC, TCXO off. */
+    TRY(CMD(0x84,0));              /* SetSleep, no warm-start retention. */
+    radio_delay_us(500);
+    return 0;
+}
+
 int radio_start(bool test) {
     uint8_t value;
     radio_reset_pin(false);

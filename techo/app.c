@@ -2,6 +2,7 @@
  * e-paper refreshes and trellis searches in their own preemptible tasks. */
 #include "board.h"
 #include "radio.h"
+#include "sleep.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
@@ -30,6 +31,8 @@ static unsigned test_count, cleaning;
 static bool redraw;
 static int64_t cleared=-1;
 static Battery battery={.level=BATTERY_UNKNOWN};
+static SleepControl sleep_control;
+static bool ignore_button, ignore_pad;
 typedef struct { Screen rows; CardView card; bool graph; ScopeView scope; unsigned cleaning; int battery; } Page;
 
 /* Arm a short RAM recording over USB for the conducted test. Only the radio
@@ -96,6 +99,7 @@ static int receive(void) {
     int64_t last=uptime_ms(), calibrated=last;
     for (;;) {
         vTaskDelay(1);
+        bool stopping=atomic_load(&sleep_control.phase)==STOP_RADIO;
         uint8_t state;
         if ((err=radio_state(&state))) return err;
         atomic_fetch_add(&polls,1);
@@ -116,7 +120,7 @@ static int receive(void) {
         /* On an ordinary capture the radio can start listening again while
          * we decide what goes in the queue. On a retune, queue the old
          * capture before arm() overwrites its frequency and noise floor. */
-        if (state==SCAN_COMPLETE && !recalibrate && (err=radio_arm(c.threshold))) return err;
+        if (state==SCAN_COMPLETE && !recalibrate && !stopping && (err=radio_arm(c.threshold))) return err;
         last=uptime_ms();
         if (state==SCAN_COMPLETE) {
             unsigned waiting=uxQueueMessagesWaiting(captures);
@@ -131,6 +135,7 @@ static int receive(void) {
             }
             bench_record(&c,admission);
         }
+        if (stopping) return 0;  /* Hand off the last completed waveform before stopping. */
         if (recalibrate) {
             if (state==SCAN_ARMED && (err=radio_finish())) return err;
             if ((err=arm(&c))) return err;
@@ -142,9 +147,17 @@ static int receive(void) {
 static void radio_task(void *arg) {
     (void)arg;
     for (;;) {
+        if (atomic_load(&sleep_control.phase)==STOP_RADIO) {
+            int err=radio_sleep();
+            if (err) atomic_store(&radio_error,err);
+            atomic_store(&ready,false);
+            sleep_radio_stopped(&sleep_control,uptime_ms());
+            while (atomic_load(&sleep_control.phase)!=LISTENING) vTaskDelay(1);
+        }
         int err=radio_bus_init();
         if (!err) err=radio_self_test();
         if (!err) err=receive();
+        if (atomic_load(&sleep_control.phase)==STOP_RADIO) continue;
         atomic_store(&ready,false); atomic_store(&radio_error,err);
         atomic_fetch_add(&retries,1);
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -161,11 +174,18 @@ static void decoder_task(void *arg) {
     (void)arg;
     bool ok=decoder_init(publish) && decoder_self_test();
     atomic_store(&decoder_ok,ok?1:-1);
-    if (!ok) { vTaskDelete(NULL); return; }
     Capture c;
     for (;;) {
-        if (xQueueReceive(captures,&c,0)) decoder_capture(&c);
-        else if (!decoder_idle(uptime_ms())) {
+        /* Once the producer is stopped, this pass can safely certify that
+         * neither queue has work left. Check before looking at either one. */
+        bool stopped=atomic_load(&sleep_control.phase)==RADIO_STOPPED;
+        int64_t now=uptime_ms();
+        if (!ok) {
+            if (stopped) sleep_decoder_idle(&sleep_control,now);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else if (xQueueReceive(captures,&c,0)) decoder_capture(&c);
+        else if (!decoder_idle(now)) {
+            if (stopped) sleep_decoder_idle(&sleep_control,now);
             atomic_fetch_add(&idle_polls,1);
             if (xQueueReceive(captures,&c,pdMS_TO_TICKS(10))) decoder_capture(&c);
         }
@@ -182,6 +202,14 @@ static void display_task(void *arg) {
         /* On timeout the old page is still here. A failed BUSY handshake
          * invalidates the panel shadow and the next attempt starts clean. */
         xQueueReceive(pages,&page,wait);
+        if (page.card==SLEEP_CARD) {
+            /* This task owns the glass. Finish the last waveform before
+             * cutting power. A disconnected panel must not drain the cell. */
+            bool ok=board_sleep_picture();
+            if (!ok) ok=board_sleep_picture();
+            board_print(ok?"SXSLEEP paper=1\n":"SXSLEEP paper=0\n");
+            board_sleep();
+        }
         bool ok=board_paint(page.rows,page.card,page.graph?&page.scope:NULL,page.battery,page.cleaning!=cleaned);
         if (ok) cleaned=page.cleaning;
         atomic_store(&painted,ok);
@@ -196,7 +224,7 @@ static void key(Key k) {
         if (k==KEY_TAP) history_older();
         else if (k==KEY_HOLD) history_live();
         else if (k==KEY_DOUBLE) {
-            menu_open(&menu,atomic_load(&requested)); notice=NULL;
+            menu_open(&menu,atomic_load(&requested),SLEEP_NOW); notice=NULL;
             taskENTER_CRITICAL(); memset(&scope,0,sizeof(scope)); taskEXIT_CRITICAL();
             atomic_store(&watching,true);
         }
@@ -209,6 +237,8 @@ static void key(Key k) {
         if (!atomic_load(&ready) || atomic_load(&applied)!=menu.hz) { notice="Tuning..."; return; }
         if (saved!=menu.hz && (!mounted || !journal_dial(menu.hz))) { notice="Save failed"; return; }
         saved=menu.hz;
+    } else if (menu.action==SLEEP_NOW) {
+        sleep_control.manual=true;
     } else if (menu.action==CLEAR_HISTORY) {
         int64_t cutoff=uptime_ms();
         if (!mounted || !journal_clear()) { notice="Erase failed"; return; }
@@ -230,12 +260,12 @@ static void console(const Page *last_page) {
         line[used]=0; used=0;
         if (!strcmp(line,"status")) {
             char msg[384];
-            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d usb=%d adc_mv=%u\n",
+            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d usb=%d adc_mv=%u quiet_s=%lu\n",
                 boot,(int)atomic_load(&ready),atomic_load(&decoder_ok),atomic_load(&bursts),
                 atomic_load(&polls),atomic_load(&dropped),atomic_load(&filtered),atomic_load(&deferred),atomic_load(&idle_polls),
                 atomic_load(&retries),atomic_load(&radio_error),
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap(),
-                battery.level==BATTERY_USB,battery.mv);
+                battery.level==BATTERY_USB,battery.mv,(unsigned long)((uptime_ms()-sleep_control.last_packet)/1000));
             board_print(msg);
         } else if (!strcmp(line,"trace arm")) {
             /* Reserve the few kilobytes only for a requested bench run.
@@ -271,6 +301,7 @@ static void console(const Page *last_page) {
         } else if (!strcmp(line,"key double")) key(KEY_DOUBLE);
         else if (!strcmp(line,"key tap")) key(KEY_TAP);
         else if (!strcmp(line,"key hold")) key(KEY_HOLD);
+        else if (!strcmp(line,"key pad") && menu.open) key(KEY_HOLD);
     }
 }
 
@@ -278,12 +309,13 @@ static void field_task(void *arg) {
     (void)arg;
     static Page page, previous;
     static Scope snapshot;
-    Button button={0};
+    Button button={0}, pad={0};
     bool allow_clean=false;
     int64_t drawn=-1000;
     for (;;) {
         Result r;
         if (xQueueReceive(results,&r,pdMS_TO_TICKS(10)) && r.capture.last_ms>cleared) {
+            sleep_received(&sleep_control,&r);
             if (r.length && !r.evidence_index) {
                 Card c={.boot=boot,.ms=r.capture.last_ms,.length=r.length};
                 memcpy(c.word,r.word,r.length);
@@ -293,9 +325,17 @@ static void field_task(void *arg) {
             if (mounted) trace_ok=journal_save(&r,boot,test_count);
         }
         int64_t now=uptime_ms();
+        bool pressed=board_button(), touched=board_touch();
+        if (!pressed) ignore_button=false;
+        if (!touched) ignore_pad=false;
         bool was_down=button.down;
-        Key event=button_update(&button,board_button(),now);
+        Key event=button_update(&button,pressed && !ignore_button,now);
+        bool pad_down=pad.down;
+        button_update(&pad,touched && !ignore_pad,now);
         if (!was_down && button.down) allow_clean=!menu.open;
+        /* Fire once on a debounced pad press. Holding a finger there must
+         * never apply the same setting twice. A pad press in LIVE is idle. */
+        if (menu.open && pad.down && !pad_down) key(KEY_HOLD);
         key(event);
         /* Holding still returns to LIVE after 0.8 s. Keep holding for three
          * seconds to wash out a ghost image without restarting the receiver. */
@@ -303,6 +343,12 @@ static void field_task(void *arg) {
             cleaning++; redraw=true; allow_clean=false;
         }
         console(&previous);
+        bool drained=atomic_load(&sleep_control.phase)==DECODER_DRAINED && !uxQueueMessagesWaiting(results);
+        if (sleep_due(&sleep_control,now,drained)) {
+            page.card=SLEEP_CARD;
+            xQueueOverwrite(pages,&page);
+            vTaskSuspend(NULL);  /* Journal closed. The display task finishes shutdown. */
+        }
         if (!redraw && now-drawn<1000) continue;
         redraw=false;
         drawn=now;
@@ -316,7 +362,7 @@ static void field_task(void *arg) {
             }
             taskENTER_CRITICAL(); snapshot=scope; taskEXIT_CRITICAL();
             scope_view(&snapshot,menu.hz,now,&page.scope);
-            menu_screen(&menu,&page.scope,menu.hz!=atomic_load(&applied)?"Tuning...":notice,page.rows);
+            menu_screen(&menu,&page.scope,menu.hz!=atomic_load(&applied)?"Tuning...":notice,true,page.rows);
             page.graph=true;
         } else {
             page.card=history_screen(page.rows,boot,now);
@@ -333,6 +379,11 @@ static void field_task(void *arg) {
 }
 
 void techo_start(void) {
+    /* A wake press belongs to the previous screen. Ignore that input until
+     * release, but let the user work the other control immediately. */
+    ignore_button=board_button();
+    ignore_pad=board_touch();
+    sleep_control.last_packet=uptime_ms();
     boot=board_random(); history_set_boot(boot);
     mounted=journal_begin(&saved); atomic_store(&requested,saved);
     captures=xQueueCreate(QUEUE_DEPTH,sizeof(Capture));

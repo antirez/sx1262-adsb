@@ -330,6 +330,22 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
+GNU FreeFont, FreeSans Bold (T-Echo sleep caption)
+
+Copyright 2002, 2003, 2005, 2008, 2009, 2010, 2012 GNU Freefont contributors.
+The Adafruit GFX bitmap font is derived from GNU FreeFont. The font is
+licensed under the GNU General Public License, version 3 or later, with
+the exception below. The text of version 3 follows in the next section.
+
+As a special exception, if you create a document which uses this font, and
+embed this font or unaltered portions of this font into the document, this
+font does not by itself cause the resulting document to be covered by the
+GNU General Public License. This exception does not however invalidate any
+other reasons why the document might be covered by the GNU General Public
+License. If you modify this font, you may extend this exception to your
+version of the font, but you are not obligated to do so.  If you do not
+wish to do so, delete this exception statement from your version.
+
 GxEPD, Jean-Marc Zingg
 
 GNU GENERAL PUBLIC LICENSE

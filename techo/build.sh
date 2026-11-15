@@ -13,7 +13,7 @@ if [ ! -f "$libs/lib/Adafruit-GFX-Library/Adafruit_GFX.h" ]; then
     git -C "$libs" checkout 48bef560d2590dbd1420e51ef6a7f588b80777a3
 fi
 cp "$root"/techo/*.c "$root"/techo/*.cpp "$root"/techo/*.h "$root"/techo/*.ino "$sketch/"
-for name in radio.c radio.h radio_bus.h sampler.c decoder.c receiver.h selftest.h observation.c history.c history.h tuning.c tuning.h cpr.c cpr.h; do
+for name in radio.c radio.h radio_bus.h sampler.c decoder.c receiver.h selftest.h observation.c history.c history.h tuning.c tuning.h cpr.c cpr.h sleep.c sleep.h; do
     cp "$root/main/$name" "$sketch/"
 done
 cp -R "$root/main/demod" "$root/main/vendor" "$sketch/"

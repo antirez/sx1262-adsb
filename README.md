@@ -133,6 +133,20 @@ For **later updates** to this receiver, run the build and flash commands only. T
 | Return to live reception | Hold for 0.8 seconds |
 | Open frequency settings | Double-click |
 
+The **T3-S3** keeps listening while it has power. Use the board’s on/off switch when running on battery. BOOT operates the aircraft display and settings.
+
+### T-Echo sleep and wake
+
+After **30 minutes without a valid packet**, the T-Echo goes to sleep. The timer starts at power-on or wake. A decoded packet starts another 30 minutes from its reception time. Before sleeping, the receiver finishes decoding the captures already in memory and saves the accepted packets.
+
+To sleep immediately, double-click the side user button. Settings opens on **Enter sleep**. Tap the top pad or hold the side button to select it, then release. The e-paper holds the aircraft picture with its front light off. Tap the top pad or press the side button to wake.
+
+<img src="docs/techo-sleep-panel.jpg" width="280" alt="iPhone photograph of the sleeping T-Echo. A passenger jet flies over Mount Etna. Two lines of bold white text read touch any button to awake.">
+
+The photograph shows the ink on the sleeping board. [View the 200 × 200 image sent to the display](docs/techo-sleep.png).
+
+The radio stops listening during sleep. On wake, the receiver opens LIVE on the saved frequency and reloads the packet history. Double-click to save any frequency change before putting the board to sleep. On the T-Echo, the L76K GPS stays in standby throughout normal use. Aircraft coordinates come from the aircraft's position messages. [Quectel L76K standby input](https://snapeda.s3.amazonaws.com/media/quectel/Quectel_L76K_Reference_Design_V1.0%20.pdf) · [T-Echo pins](https://github.com/Xinyuan-LilyGO/T-Echo#-hardware-description)
+
 ### T-Echo e-paper refresh
 
 ![The T-Echo shows LAB123's altitude, then its coordinates. The callsign stays in place as the detail lines refresh.](docs/techo-refresh.gif)
@@ -141,9 +155,13 @@ On a flight or history page, the T-Echo writes new black strokes and erases old 
 
 On our T-Echo at room temperature, changing between a text-heavy flight card and the TEST page took **about 0.38 seconds**. The previous driver took **0.62 seconds** for the same change. After **200 consecutive page changes**, an iPhone photograph of one erased line showed about **3%** of the old lettering’s contrast, measured against a factory-clean copy of the same page. The 200 changes took 379–385 ms each.
 
+The first refresh after RESET takes about two seconds. You can already tap for history or double-click for Settings during that refresh. The selected page appears as soon as the panel finishes drawing it.
+
 The frequency screen washes the white background once when you enter or leave it. As the RSSI graph scrolls, only pixels that actually change get a pulse. A trace can leave a faint trail while you tune. The panel runs its factory clean at power-on. To request another, **hold the user button for three seconds** from a flight or history screen. It returns to LIVE at the usual 0.8 seconds and keeps listening during the clean.
 
 The SSD1681 has two RAM bits per pixel. Together they select one of four waveforms. The driver uses them to leave a pixel alone, draw it black, erase it to white, or briefly invert and restore nearby white paper. On text pages each phase lasts four frames. A changing stroke gets both phases in the same direction. The neighboring white paper gets four frames in each direction. This adapts the fast waveform in the Badger 2040 experiments to the SSD1681. The RSSI graph uses a single six-frame pulse. The firmware powers down the panel's analog supply after each update. [T-Echo driver](techo/paper.cpp) · [Badger waveforms](https://github.com/antirez/uc8151_micropython/blob/cc2a0de91386f08ee6c08e6e315bcfef850ffc49/uc8151.py#L449) · [SSD1681 datasheet, sections 6.5–6.7 and command 0Ch](https://cdn-learn.adafruit.com/assets/assets/000/099/573/original/SSD1681.pdf)
+
+The sleep picture uses those same two bits to select four shades. First the panel erases the picture area to white and draws the wake-up caption in black and white. White pixels and the caption then sit still, while light gray, dark gray and black get 2, 4 and 12 frames of drive toward black. The controller switches off after the last frame and the ink holds the picture. These timings were measured on the T-Echo at room temperature. [Badger grayscale driver](https://github.com/antirez/uc8151_micropython/blob/cc2a0de91386f08ee6c08e6e315bcfef850ffc49/uc8151.py#L755)
 
 ### Reading the display
 
@@ -173,9 +191,9 @@ For the first position the board needs one odd and one even airborne position re
 
 Aircraft transmit on 1090 MHz. The default **receiver dial is 1089.800 MHz**. Both of our boards picked up weak bench signals better with this offset. On the T-Echo, the response dipped when the signal was close to the dial frequency and recovered on either side. The best dial setting may vary between boards. [T-Echo tuning measurements](docs/techo-tuning.md)
 
-In settings, **tap** to cycle through increase, decrease, step size, default, discard and clear history. **Hold** to apply the selected action. The radio retunes immediately after a frequency change. **Double-click** to save the frequency across power cycles and return to the aircraft display.
+The T3-S3 opens settings on **increase frequency**. The T-Echo opens on **Enter sleep**. Tap once for the same frequency controls. **Tap the user button** to cycle through increase frequency, decrease frequency, step size, default, discard and clear history. **Hold** to apply the selected action. On the T-Echo, **tap the top pad** to do the same thing. The radio retunes immediately after a frequency change. **Double-click the user button** to save the frequency across power cycles and return to the aircraft display.
 
-To start a new outing with an empty list, tap until **Clear history** appears, then hold the button for 0.8 seconds until **History cleared** appears. This resets the aircraft count and permanently deletes the saved packet recordings on the board, including those available over USB. The separate background power recordings and the tuned frequency are kept.
+To start a new outing with an empty list, tap until **Clear history** appears. Hold the button for 0.8 seconds or tap the T-Echo pad. **History cleared** confirms that the aircraft count was reset and the saved packet recordings were permanently deleted, including those available over USB. The separate background power recordings and the tuned frequency are kept.
 
 `RX` is the frequency the receiver is listening to, in MHz. **A** is average signal strength over 200 ms and **P** is the peak over one second. Both are in dBm. A reading of −75 dBm is stronger than −93 dBm.
 

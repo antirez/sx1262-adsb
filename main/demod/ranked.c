@@ -10,7 +10,10 @@ typedef struct {
 } sx_path;
 typedef struct {
     sx_list_workspace list;
-    sx_path heap[64+3*SX_RANK_LIMIT+4];
+    /* At most eight first paths, then each of SX_RANK_LIMIT pops adds three.
+     * The heap never holds more than 8+2*SX_RANK_LIMIT paths. A smaller
+     * workspace fits one 48 KB block of ESP32-S3 internal RAM. */
+    sx_path heap[64+2*SX_RANK_LIMIT+4];
     int used;
 } sx_rank_workspace;
 

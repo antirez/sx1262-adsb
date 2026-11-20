@@ -223,6 +223,12 @@ For a short T-Echo bench run, send `trace arm` in a serial terminal before the t
 
 The replay tests feed saved RSSI samples through the same C decoder used on both boards. They check 24 expected DF17 packets in 98 outdoor and bench captures, four earlier bench test messages, 15 background captures with no expected message, and both airborne position reports illustrated above. The expected words are kept out of the decoder input. These tests check bit recovery on known recordings. Measuring range or missed transmissions requires a live RF comparison. [Replay tests and fixtures](host)
 
+### Decoder speed on the T3-S3
+
+Enrico Lorenzoni reduced the trellis workspace from 50,084 to 46,500 bytes so it fits in one block of ESP32-S3 internal RAM. We compared his change with the previous firmware on the same T3-S3. Each build decoded 48 saved RSSI waveforms, with time to finish all retries before the next waveform arrived. Both recovered the same 24 known DF17 messages. Total decoder time fell from **44.31 s in PSRAM to 34.77 s in internal RAM**, a 22% reduction. [Enrico’s implementation and Heltec V4 measurements](https://github.com/antirez/sx1262-adsb/pull/3)
+
+We then fed the same 48 waveforms into the capture queue five times, one every 8 ms. Of 120 known packets, the old build recovered **76** and the new one **78**. Both filtered 87 captures by shape. The full queue dropped 50 captures in the old build and 48 in the new one. These counts come from one deliberately overloaded replay per build.
+
 ### T-Echo on a 1090 MHz coax splitter
 
 A HackRF fed the T-Echo and an RTL-SDR through an attenuated splitter. The T-Echo dial was 1089.800 MHz. Each run sent 16 distinct DF17 test words through the normal aircraft decoder. A packet counted only when its 14 bytes matched a transmitted word. Both firmware versions saw the same packet sequences, timing and transmit gain.

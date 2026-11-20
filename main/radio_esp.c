@@ -1,12 +1,17 @@
-/* ESP32-S3 wiring and SPI transport for the T3-S3. */
+/* ESP32-S3 wiring and SPI transport for the selected board profile. */
 #include "radio_bus.h"
+#include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_check.h"
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
 
+#ifdef CONFIG_ADSB_BOARD_TBEAM_SUPREME_SX1262
+enum { CS=10, CLK=12, MISO=13, MOSI=11, RESET=5, BUSY=4 };
+#else
 enum { CS=7, CLK=5, MISO=3, MOSI=6, RESET=8, BUSY=34 };
+#endif
 static spi_device_handle_t spi;
 #define TRY(call) ESP_RETURN_ON_ERROR((call),"radio",#call)
 

@@ -1,6 +1,6 @@
-# ADS-B on the LilyGO T3-S3 and T-Echo
+# ADS-B on the LilyGO T3-S3, T-Echo and T-Beam Supreme
 
-Tired of waiting for LoRa messages? You are in the right place: this firmware turns the **LilyGO T3-S3** with an OLED and the **original LilyGO T-Echo** with an e-paper display into pocket aircraft receivers. Both use an unmodified SX1262 radio (no hardware modifications needed). Connect an antenna to the LoRa antenna connector (even the stock antenna works) and power the board by USB or battery. It listens on 1090 MHz for the ADS-B messages in which aircraft broadcast their identity, position and movement. The display shows the flight's callsign or the aircraft's six-character address in large type. As reports arrive, the board fills in altitude, speed, direction and coordinates. The sampler, decoder and flight display logic are written in C. You can retrieve the recordings over USB after an outing. Note: **the technical details used in order to turn the SX1262 into an ADSB receiver are quite interesting, check them later**.
+Tired of waiting for LoRa messages? You are in the right place: this firmware turns the **LilyGO T3-S3** and **T-Beam Supreme** with OLED displays and the **original LilyGO T-Echo** with an e-paper display into pocket aircraft receivers. All use an unmodified SX1262 radio (no hardware modifications needed). Connect an antenna to the LoRa antenna connector (even the stock antenna works) and power the board by USB or battery. It listens on 1090 MHz for the ADS-B messages in which aircraft broadcast their identity, position and movement. The display shows the flight's callsign or the aircraft's six-character address in large type. As reports arrive, the board fills in altitude, speed, direction and coordinates. The sampler, decoder and flight display logic are written in C. You can retrieve the recordings over USB after an outing. Note: **the technical details used in order to turn the SX1262 into an ADSB receiver are quite interesting, check them later**.
 
 <img src="docs/receivers-outdoors.jpg" width="560" alt="Two handheld receivers outdoors. The T-Echo's e-paper screen shows flight RYR9JW and the T3-S3's OLED shows aircraft 4BAA79.">
 
@@ -20,6 +20,7 @@ These are screenshots from the board. The upper pair shows the same packet three
 | --- | --- | --- |
 | Original T-Echo, nRF52840, SX1262, 1.54-inch monochrome e-paper | [T-Echo firmware (.uf2)](firmware/techo-adsb.uf2) | USB data cable and the board's UF2 drive |
 | T3-S3, ESP32-S3, SX1262, monochrome OLED, 4 MB flash | [T3-S3 firmware and installer (.zip)](firmware/t3s3-adsb.zip) | USB data cable, Python 3 and esptool |
+| T-Beam Supreme SX1262 | No packaged download; [build a package from source](#t-beam-supreme-sx1262) | USB data cable, ESP-IDF, Python 3 and esptool |
 
 On GitHub, use **Download raw file** to save a firmware download. [SHA-256 checksums](firmware/SHA256SUMS) · [Third-party notices](firmware/NOTICES.txt)
 
@@ -37,11 +38,13 @@ The UF2 writes application flash at `0x26000`. Updates preserve the bootloader, 
 2. Connect USB. Hold **BOOT**, tap and release **RESET**, then release **BOOT**. Close any serial monitor.
 3. Run `python install.py`. It finds a single Espressif USB port automatically. With several devices connected, use `python install.py --port COM5` or supply the actual port on your computer. When the write verifies, tap **RESET** if the OLED hasn't started.
 
-When replacing other firmware, the installer first reads all 4 MB of flash into a timestamped backup in the current folder and verifies it against the board. It then clears the area the new receiver will use for recordings. When updating an existing receiver, it writes only the bootloader, partition table and application. The frequency and recordings survive. [Installer source](install/t3s3.py)
+When replacing other firmware, the installer first reads all 4 MB of flash into a timestamped backup in the current folder and verifies it against the board. It then clears the area the new receiver will use for recordings. When updating an existing receiver, it writes only the bootloader, partition table and application. The frequency and recordings survive. [Installer source](install/installer.py)
 
 ## Supported hardware
 
 **T3-S3 SX1262.** LilyGO fits this board with an ESP32-S3FH4R2, 4 MB flash, 2 MB quad PSRAM and a 128 × 64 SSD1306 OLED. We used the high-band board. Reception on LilyGO's 400–520 MHz version is unverified. V1.2 and V1.3 share the documented pinout. The exact PCB revision of the tested unit was not recorded. **Check the radio variant on the board or its product listing before flashing.** LilyGO sells several radios under the T3-S3 name. [LilyGO's T3-S3 SX1262 hardware guide and board photos](https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/master/docs/en/t3_s3_sx1262/t3_s3_sx1262_hw.md)
+
+**T-Beam Supreme SX1262.** LilyGO fits this board with an ESP32-S3FN8, 8 MB flash, 8 MB quad PSRAM and a 128 × 64 SH1106 OLED. **Before flashing, check that your board has the SX1262 915 MHz RF hardware used here.** The 868 MHz variant is untested and not covered by this profile. [LilyGO's T-Beam Supreme hardware guide](https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/2fc52c7fa7a2b4cd07536a8ad77ca7256a59975e/docs/en/t_beam_supreme/t_beam_supreme_hw.md)
 
 **Original T-Echo SX1262.** This port uses the nRF52840, the high-band SX1262 and the 200 × 200 DEPG0150BN e-paper panel. The pinout, panel orientation and two SPI buses follow the original FreakWAN T-Echo port. T-Echo Lite, Plus, color panels and other bootloader layouts are untested. [LilyGO T-Echo board and pinout](https://github.com/Xinyuan-LilyGO/T-Echo) · [FreakWAN T-Echo port](https://github.com/antirez/freakwan/tree/main/techo-port)
 
@@ -52,10 +55,10 @@ On the T-Echo, an attenuated coax test at 880 MHz recovered the callsign `LAB123
 ## How it receives a packet
 
 1. **Capture power on the radio.** The firmware uses the SX1262's GFSK receive path for its 1 MHz filter. At startup the microcontroller uploads a modified version of Semtech's spectral-scan program into the radio's volatile memory. The program reads signal strength (RSSI) every 0.75 µs and keeps a rolling average of 80 readings. When that 60 µs average rises 2.5 dB above the measured noise floor, it keeps 84 readings up to the crossing and 172 more. Keeping the earlier readings lets the decoder find a preamble that arrived while the average was still rising. [On-radio sampling loop](main/sampler.c)
-2. **Keep listening during a decode.** One ESP32-S3 core polls the SX1262 every 250 µs. It reads each completed recording over SPI and rearms the radio before deciding whether to queue it. The other core can spend much longer working on the previous recording. On the single-core nRF52840, a higher-priority task polls once per RTOS tick (about 0.98 ms) and preempts decoding and e-paper updates. Both boards collect the individual RSSI samples inside the radio at the same speed. The SX1262 holds one completed capture at a time, so a transmission arriving before rearm can still be missed. [Radio driver](main/radio.c) · [Capture and decoder tasks](main/app.c)
+2. **Keep listening during a decode.** One ESP32-S3 core polls the SX1262 every 250 µs. It reads each completed recording over SPI and rearms the radio before deciding whether to queue it. The other core can spend much longer working on the previous recording. On the single-core nRF52840, a higher-priority task polls once per RTOS tick (about 0.98 ms) and preempts decoding and e-paper updates. The boards collect the individual RSSI samples inside the radio at the same speed. The SX1262 holds one completed capture at a time, so a transmission arriving before rearm can still be missed. [Radio driver](main/radio.c) · [Capture and decoder tasks](main/app.c)
 3. **Recover the bits from the shape of the signal.** A Mode S bit lasts 1 µs. A 0.5 µs pulse in the first half represents one, and a pulse in the second half represents zero. The radio's filter blurs neighboring pulses together. The decoder finds the preamble, then scores candidate bit sequences against the waveform predicted by measured radio responses. A 64-state trellis keeps plausible alternatives as it goes. The firmware accepts 112-bit DF17 ADS-B messages after checking their 24-bit CRC. It can also combine repeated 56-bit DF11 all-call replies to recover an aircraft address. [Decoder](main/decoder.c) · [Sequence search](main/demod/sequence.c) · [Calibration tables](models)
 
-When the decoder keeps up, it gets every recording. Once four recordings are waiting on the T-Echo (eight on the T3-S3), the radio task starts checking the shape of each new burst. It counts 6 µs intervals that have both a rise above the local floor and changes in power within the interval. A steady carrier or a brief spike can trip the radio but has few of these intervals. A likely short reply gets a 56-bit envelope check. A likely long reply gets a preamble check. Once the queue is half full, the remaining slots are reserved for long replies. Short replies can still enter as the queue drains. Accepted captures stay in arrival order and go through the normal decoder. The radio keeps listening even when the queue is full.
+When the decoder keeps up, it gets every recording. Once four recordings are waiting on the T-Echo (eight on the ESP32-S3 boards), the radio task starts checking the shape of each new burst. It counts 6 µs intervals that have both a rise above the local floor and changes in power within the interval. A steady carrier or a brief spike can trip the radio but has few of these intervals. A likely short reply gets a 56-bit envelope check. A likely long reply gets a preamble check. Once the queue is half full, the remaining slots are reserved for long replies. Short replies can still enter as the queue drains. Accepted captures stay in arrival order and go through the normal decoder. The radio keeps listening even when the queue is full.
 
 Over USB, `status` reports how many captures this check skipped (`filtered`), how many passed but had no queue slot (`queue_full`), and how many deferred attempts were evicted or cleared on retune (`deferred_drops`). When `idle_polls` advances, the decoder has caught up with both queues. [Queue admission](main/decoder.c)
 
@@ -86,20 +89,25 @@ arduino-cli core install adafruit:nrf52@1.3.0 --additional-urls "$INDEX"
 ./techo/build.sh
 ```
 
-Copy `build-techo/techo-adsb.uf2` to `TECHOBOOT`. The script fetches the pinned LilyGO checkout for its Adafruit GFX drawing library. Set `LILYGO_T_ECHO` to use an existing checkout. The two boards compile the same radio program, demodulator, CRC checks, CPR and packet-card logic. The T-Echo keeps its calibration tables in flash, with RAM for 32 fresh captures and 12 deferred decoding attempts. [T-Echo board code](techo) · [Adafruit nRF52 core](https://github.com/adafruit/Adafruit_nRF52_Arduino/tree/1.3.0) · [T-Echo e-paper driver](techo/paper.cpp)
+Copy `build-techo/techo-adsb.uf2` to `TECHOBOOT`. The script fetches the pinned LilyGO checkout for its Adafruit GFX drawing library. Set `LILYGO_T_ECHO` to use an existing checkout. The boards compile the same radio program, demodulator, CRC checks, CPR and packet-card logic. The T-Echo keeps its calibration tables in flash, with RAM for 32 fresh captures and 12 deferred decoding attempts. [T-Echo board code](techo) · [Adafruit nRF52 core](https://github.com/adafruit/Adafruit_nRF52_Arduino/tree/1.3.0) · [T-Echo e-paper driver](techo/paper.cpp)
 
-### T3-S3
+### ESP32-S3 setup
 
-Use **ESP-IDF v5.1.1** with the ESP32-S3 toolchain. Follow Espressif's setup guide for the prerequisites and run `./install.sh esp32s3` from the ESP-IDF directory on Linux or macOS. Then open a shell in the root of this receiver repository. The commands below assume you installed ESP-IDF in `~/esp/esp-idf`. The project selects the ESP32-S3 target. [ESP-IDF v5.1.1 setup guide](https://docs.espressif.com/projects/esp-idf/en/v5.1.1/esp32s3/get-started/index.html)
+For the T3-S3 and T-Beam Supreme, use **ESP-IDF v5.1.1** with the ESP32-S3 toolchain. Follow Espressif's setup guide for the prerequisites and run `./install.sh esp32s3` from the ESP-IDF directory on Linux or macOS. Then open a shell in the root of this receiver repository. The commands below assume you installed ESP-IDF in `~/esp/esp-idf`. The project selects the ESP32-S3 target. [ESP-IDF v5.1.1 setup guide](https://docs.espressif.com/projects/esp-idf/en/v5.1.1/esp32s3/get-started/index.html)
 
 ```sh
 . "$HOME/esp/esp-idf/export.sh"
+```
+
+### T3-S3
+
+```sh
 idf.py build
 ```
 
 Connect a USB data cable. To enter the ROM loader, hold **BOOT**, press and release **RESET**, then release **BOOT**. Set `PORT` to the serial device that appears *after* that sequence. For example, use `PORT=/dev/cu.usbmodem21101` on macOS or `PORT=/dev/ttyACM0` on Linux, substituting your device's actual name.
 
-### First installation over MicroPython, FreakWAN or another firmware
+### T3-S3: first installation over MicroPython, FreakWAN or another firmware
 
 Back up the whole 4 MB flash if you want to restore the existing installation and its files. These commands use esptool 4.x from the ESP-IDF environment. Wait for the verification to report `verify OK` before proceeding.
 
@@ -115,7 +123,7 @@ python -m esptool --chip esp32s3 -p "$PORT" --before no_reset --after no_reset v
 python -m esptool --chip esp32s3 -p "$PORT" --before no_reset --after no_reset erase_region 0x100000 0xf0000
 ```
 
-### Flash and start listening
+### T3-S3: flash and start listening
 
 ```sh
 idf.py -p "$PORT" flash monitor
@@ -125,9 +133,23 @@ If the console says `waiting for download`, tap **RESET** with BOOT released. Th
 
 For **later updates** to this receiver, run the build and flash commands only. They preserve the journal and saved frequency. To **restore the previous firmware**, enter the ROM loader and run `python -m esptool --chip esp32s3 -p "$PORT" write_flash 0 "$BACKUP"` with the verified backup file, then tap RESET.
 
+### T-Beam Supreme SX1262
+
+Build with a separate build directory and sdkconfig, then package the installer ZIP:
+
+```sh
+idf.py -B build-tbeam-supreme \
+  -D SDKCONFIG=build-tbeam-supreme/sdkconfig \
+  -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.defaults.tbeam-supreme' \
+  build
+python install/package.py --board tbeam-supreme
+```
+
+The ZIP is written to `firmware/tbeam-supreme-adsb.zip`. To install it, follow the T3-S3 steps under [Install without compiling](#install-without-compiling), using this ZIP. Use only with the 915 MHz variant; the installer checks for 8 MB flash. Secure boot and flash encryption must be disabled. On first installation it verifies a full-flash backup before erasing the captures partition. Later updates preserve the packet journal and saved frequency.
+
 ## Use the receiver
 
-| On the aircraft display | T3-S3 BOOT or T-Echo user button |
+| On the aircraft display | T3-S3 or T-Beam BOOT, or T-Echo user button |
 | --- | --- |
 | Browse the last 64 packet cards | Tap once per older packet |
 | Return to live reception | Hold for 0.8 seconds |
@@ -217,11 +239,11 @@ host/build/receiverctl "$PORT" status
 host/build/receiverctl "$PORT" dump > field.jsonl
 ```
 
-The dump is one JSON object per line. Each capture includes the 256 raw RSSI readings, the noise floor and the actual receiver setting, `dial_hz`. The older `signal_hz` field always identifies the nominal 1090 MHz aircraft channel. For an off-band bench recording, use the generator setting for the carrier frequency. Accepted packets also include the decoded bytes. In a serial monitor, `screen` returns the T3-S3 OLED image as eight pages of 128 bytes in hexadecimal. On the T-Echo it returns the eight lines selected for the e-paper display. Type `paper` for the last update time and counts of factory cleans (`full`), text repaints (`repaint`), graph updates (`fast`), skipped updates and errors. Type `paper clean` to request a full refresh over USB.
+The dump is one JSON object per line. Each capture includes the 256 raw RSSI readings, the noise floor and the actual receiver setting, `dial_hz`. The older `signal_hz` field always identifies the nominal 1090 MHz aircraft channel. For an off-band bench recording, use the generator setting for the carrier frequency. Accepted packets also include the decoded bytes. In a serial monitor, `screen` returns the ESP32-S3 OLED image as eight pages of 128 bytes in hexadecimal. On the T-Echo it returns the eight lines selected for the e-paper display. Type `paper` for the last update time and counts of factory cleans (`full`), text repaints (`repaint`), graph updates (`fast`), skipped updates and errors. Type `paper clean` to request a full refresh over USB.
 
 For a short T-Echo bench run, send `trace arm` in a serial terminal before the transmissions. The radio task keeps up to 18 consecutive captures in RAM, including those rejected by the decoder queue. After the transmissions, send `trace dump`. Each `SXTRACE` line gives the capture number, the last armed and first completed poll times in milliseconds, the floor in half-decibel codes, the queue decision (`queued`, `filtered` or `full`), and 256 RSSI bytes in hexadecimal. `SXEND` ends the dump and releases the buffer. The ordinary packet journal continues to work during the test.
 
-The replay tests feed saved RSSI samples through the same C decoder used on both boards. They check 24 expected DF17 packets in 98 outdoor and bench captures, four earlier bench test messages, 15 background captures with no expected message, and both airborne position reports illustrated above. The expected words are kept out of the decoder input. These tests check bit recovery on known recordings. Measuring range or missed transmissions requires a live RF comparison. [Replay tests and fixtures](host)
+The replay tests feed saved RSSI samples through the same C decoder used on all three boards. They check 24 expected DF17 packets in 98 outdoor and bench captures, four earlier bench test messages, 15 background captures with no expected message, and both airborne position reports illustrated above. The expected words are kept out of the decoder input. These tests check bit recovery on known recordings. Measuring range or missed transmissions requires a live RF comparison. [Replay tests and fixtures](host)
 
 ### Decoder speed on the T3-S3
 

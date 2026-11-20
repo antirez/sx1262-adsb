@@ -1,0 +1,11 @@
+menu "ADS-B receiver"
+
+config ADSB_BOARD_TBEAM_SUPREME_SX1262
+    bool "T-Beam Supreme SX1262"
+    default n
+    help
+        Select the T-Beam Supreme wiring and peripherals for the 915 MHz
+        SX1262 hardware variant. This does not change the ADS-B receiver
+        frequency or imply support for the separate 868 MHz variant.
+
+endmenu

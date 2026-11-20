@@ -5,6 +5,7 @@
 #include "receiver.h"
 #include "selftest.h"
 #include <math.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #ifdef ESP_PLATFORM
@@ -35,6 +36,7 @@ typedef struct {
 enum { RF, REG, BAND1090, FAST1090, SHORT };
 static Response models[5];
 static uint8_t test_shape[4+8*10];
+static atomic_bool bench;
 static sx_rank_workspace *work;
 /* The short-reply aligner and adaptive long-frame fit run at different
  * stages. Neither keeps useful data in its scratch between calls. */
@@ -121,7 +123,7 @@ ReplyShape decoder_candidate(const Capture *c) {
     }
     candidate_t hit[2];
     if (sx_preambles_model(c->raw,SAMPLES,shape_data,ASSET_SIZE(shape),hit,2,4,3500) ||
-        sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),hit,2,4,3500)) return LONG_REPLY;
+        (decoder_bench() && sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),hit,2,4,3500))) return LONG_REPLY;
     return NO_REPLY;
 }
 
@@ -580,7 +582,7 @@ void decoder_capture(const Capture *c) {
         }
     }
     if (n && try_family(&r,positions,n,hint)) return;
-    int nf = sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),fixture,3,4,3500);
+    int nf = decoder_bench() ? sx_preambles_model(c->raw,SAMPLES,test_shape,sizeof(test_shape),fixture,3,4,3500) : 0;
     Response m = models[BAND1090];
     for (int i = 0; i < nf; i++) {
         position(&r,fixture[i]);
@@ -600,6 +602,9 @@ done:
 #ifdef ESP_PLATFORM
 bool decoder_workspace_internal(void) { return esp_ptr_internal(work); }
 #endif
+
+void decoder_set_bench(bool on) { atomic_store_explicit(&bench,on,memory_order_relaxed); }
+bool decoder_bench(void) { return atomic_load_explicit(&bench,memory_order_relaxed); }
 
 bool decoder_init(Report report) {
     publish = report;

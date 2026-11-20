@@ -16,8 +16,11 @@ static bool check(Capture *c, ReplyShape expected, const char *name) {
 
 /* The two interferers came back through a T-Echo on the coax bench. The
  * roof recording contains a repeated DF11 all-call. Its original 0.593 us
- * samples were resampled to the current scanner's 0.75 us period. */
-static bool check_recordings(const char *path) {
+ * samples were resampled to the current scanner's 0.75 us period. The two
+ * test-shape captures from garden-and-bench hold no reply, but resemble the
+ * TEST preamble, so only bench mode admits them as long replies. */
+static bool check_recordings(const char *path, bool bench) {
+    decoder_set_bench(bench);
     FILE *f=fopen(path,"r");
     if (!f) return false;
     char name[64], hex[2*SAMPLES+1];
@@ -31,6 +34,7 @@ static bool check_recordings(const char *path) {
             sscanf(hex+2*i,"%2x",&byte); /* The scanset above admits only hex. */
             c.raw[i]=byte;
         }
+        if (bench && !strncmp(name,"test-shape-",11)) expected=LONG_REPLY;
         if (!check(&c,expected,name)) break;
         records++;
     }
@@ -52,5 +56,6 @@ int main(int argc, char **argv) {
     if (!check(&c,NO_REPLY,"steady carrier")) return 1;
     for (int i=64; i<149; i++) c.raw[i]=150+((i%3)==0 ? 7 : 0);
     if (!check(&c,SHORT_REPLY,"modulated short reply envelope")) return 1;
-    return argc==2 && check_recordings(argv[1]) ? 0 : 1;
+    return argc==2 && check_recordings(argv[1],false) && check_recordings(argv[1],true) &&
+        check_recordings(argv[1],false) ? 0 : 1;
 }

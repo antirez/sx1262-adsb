@@ -292,13 +292,18 @@ static void console(bool screen_ok) {
             }
             else if (!strcmp(line,"status"))
                 printf("SXSTATUS %08"PRIx32" ready=%u bursts=%u polls=%u queue_peak=%u queue_full=%u filtered=%u idle_polls=%u "
-                       "rearm_max_us=%u retries=%u deferred_drops=%u log=%u oled=%u dial=%u saved=%u menu=%u scope_cols=%u scope_samples=%u rssi_code=%d peak_code=%d scope_hits=%u wave_block=%u zoom=%u decoder_ram=%s\n",boot_id,atomic_load(&ready),
+                       "rearm_max_us=%u retries=%u deferred_drops=%u log=%u oled=%u dial=%u saved=%u menu=%u scope_cols=%u scope_samples=%u rssi_code=%d peak_code=%d scope_hits=%u wave_block=%u zoom=%u decoder_ram=%s bench=%s\n",boot_id,atomic_load(&ready),
                        atomic_load(&bursts),atomic_load(&polls),atomic_load(&high_water),atomic_load(&full_queue),atomic_load(&filtered),atomic_load(&idle_polls),
                        atomic_load(&max_rearm_us),atomic_load(&restarts),atomic_load(&deferred),mounted,screen_ok,atomic_load(&applied_hz),
                        (unsigned)saved_hz,menu.open,menu.open?view.columns:0,menu.open?view.samples:0,
                        menu.open?view.level:-1,menu.open?view.strongest:-1,menu.open?view.triggers:0,
                        menu.open?(unsigned)view.block:0,menu.open && view.zoom,
-                       decoder_workspace_internal()?"internal":"psram");
+                       decoder_workspace_internal()?"internal":"psram",decoder_bench()?"on":"off");
+            else if (!strcmp(line,"bench on") || !strcmp(line,"bench off") || !strcmp(line,"bench")) {
+                if (!strcmp(line,"bench on")) decoder_set_bench(true);
+                else if (!strcmp(line,"bench off")) decoder_set_bench(false);
+                printf("SXBENCH %s\n",decoder_bench()?"on":"off");
+            }
             else if (!strncmp(line,"import ",7) && mounted) {
                 bool ok=storage_import(line+7);
                 puts(ok?"SXIMPORT OK":"SXIMPORT ERROR");

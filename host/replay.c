@@ -21,11 +21,16 @@ static int nibble(char c) {
 }
 
 int main(int argc, char **argv) {
-    bool busy = argc==2 && !strcmp(argv[1],"--busy");
-    if (argc!=1 && !busy) { fputs("usage: replay [--busy]\n",stderr); return 2; }
+    bool busy = false, bench = false;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i],"--busy")) busy = true;
+        else if (!strcmp(argv[i],"--bench")) bench = true;
+        else { fputs("usage: replay [--busy] [--bench]\n",stderr); return 2; }
+    }
     char line[768], hex[513], extra;
     Capture c = {0};
     if (!decoder_init(show) || !decoder_self_test()) return 1;
+    decoder_set_bench(bench);
     while (fgets(line,sizeof(line),stdin)) {
         unsigned floor;
         if (sscanf(line,"%"SCNu32" %"SCNd64" %"SCNd64" %u %512s %c",

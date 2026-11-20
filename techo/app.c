@@ -260,12 +260,12 @@ static void console(const Page *last_page) {
         line[used]=0; used=0;
         if (!strcmp(line,"status")) {
             char msg[384];
-            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d usb=%d adc_mv=%u quiet_s=%lu\n",
+            snprintf(msg,sizeof(msg),"SXSTATUS %08"PRIx32" ready=%d selftest=%d bursts=%u polls=%u queue_full=%u filtered=%u deferred_drops=%u idle_polls=%u retries=%u error=%d log=%d oled=%d dial=%u saved=%u menu=%d heap=%d usb=%d adc_mv=%u quiet_s=%lu bench=%s\n",
                 boot,(int)atomic_load(&ready),atomic_load(&decoder_ok),atomic_load(&bursts),
                 atomic_load(&polls),atomic_load(&dropped),atomic_load(&filtered),atomic_load(&deferred),atomic_load(&idle_polls),
                 atomic_load(&retries),atomic_load(&radio_error),
                 mounted && trace_ok,(int)atomic_load(&painted),atomic_load(&applied),(unsigned)saved,menu.open,board_free_heap(),
-                battery.level==BATTERY_USB,battery.mv,(unsigned long)((uptime_ms()-sleep_control.last_packet)/1000));
+                battery.level==BATTERY_USB,battery.mv,(unsigned long)((uptime_ms()-sleep_control.last_packet)/1000),decoder_bench()?"on":"off");
             board_print(msg);
         } else if (!strcmp(line,"trace arm")) {
             /* Reserve the few kilobytes only for a requested bench run.
@@ -285,6 +285,11 @@ static void console(const Page *last_page) {
             free(bench);
             bench=NULL;
         } else if (!strcmp(line,"dump")) { board_print(mounted && journal_dump() ? "SXEND\n" : "SXERROR reading journal\n"); }
+        else if (!strcmp(line,"bench on") || !strcmp(line,"bench off") || !strcmp(line,"bench")) {
+            if (!strcmp(line,"bench on")) decoder_set_bench(true);
+            else if (!strcmp(line,"bench off")) decoder_set_bench(false);
+            board_print(decoder_bench() ? "SXBENCH on\n" : "SXBENCH off\n");
+        }
         else if (!strcmp(line,"paper")) board_paper_status();
         else if (!strcmp(line,"paper clean")) { cleaning++; redraw=true; }
         else if (!strcmp(line,"bootloader")) board_bootloader();

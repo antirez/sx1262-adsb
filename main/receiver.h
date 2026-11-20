@@ -39,6 +39,12 @@ bool decoder_init(Report report);
 bool decoder_workspace_internal(void);
 #endif
 bool decoder_self_test(void);
+/* Bench mode also searches every capture for the private TEST word that only
+ * a bench transmitter sends. Aircraft never send it, so it is off by default.
+ * Any task may switch it. The change applies from the next capture that is
+ * checked or decoded. */
+void decoder_set_bench(bool on);
+bool decoder_bench(void);
 void decoder_capture(const Capture *capture);
 bool decoder_idle(int64_t now_ms);
 unsigned decoder_evictions(void);

@@ -9,6 +9,7 @@
 #include <string.h>
 #ifdef ESP_PLATFORM
 #include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
 #endif
 
 #include "demod/preamble.c"
@@ -596,6 +597,10 @@ done:
     publish(&r);
 }
 
+#ifdef ESP_PLATFORM
+bool decoder_workspace_internal(void) { return esp_ptr_internal(work); }
+#endif
+
 bool decoder_init(Report report) {
     publish = report;
     models[RF] = response(measured_data,measured_end,"measured RF");
@@ -604,9 +609,9 @@ bool decoder_init(Report report) {
     models[BAND1090] = response(standard_data,standard_end,"1090 MHz RF");
     models[FAST1090] = response(fast_data,fast_end,"1090 MHz fast RSSI");
     make_test_shape();
-    /* The trellis workspace exceeds the PSRAM allocation limit, but every
-     * branch metric goes through it. Keep it in internal RAM when possible. */
 #ifdef ESP_PLATFORM
+    /* Ordinary calloc prefers PSRAM for a block this large. Every trellis
+     * search uses this workspace, so ask for fast internal RAM first. */
     work = heap_caps_calloc(1,sizeof(*work),MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
     if (!work)
 #endif

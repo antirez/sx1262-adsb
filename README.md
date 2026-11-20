@@ -205,6 +205,8 @@ The display looks for a 36 µs interval at least 6 dB above the measured floor a
 
 ## Retrieve or replay recordings
 
+On the T3-S3, the USB `status` command reports where the decoder keeps its 46,500-byte trellis workspace. `decoder_ram=internal` means it obtained fast on-chip RAM. If that allocation fails, it can use external RAM and report `decoder_ram=psram`.
+
 The firmware keeps accepted packets and periodic background recordings in separate rotating logs. The T-Echo reserves 28 KiB of internal flash for its filesystem. It keeps up to 36 accepted or supporting traces and eight background captures across two generations of each log. It can show up to 64 packet cards during a session. After a restart it rebuilds the cards from the traces still in flash. The host build produces the replay decoder and, on macOS and Linux, `receiverctl` for reading the board over USB. Close any serial monitor using the port first.
 
 ```sh

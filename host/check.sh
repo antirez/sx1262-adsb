@@ -12,12 +12,18 @@ for set_name in garden-and-bench bench-test morning techo-bench; do
     gzip -dc "$here/fixtures/$set_name.tsv.gz" > "$tmp/rows"
     cut -f1-5 "$tmp/rows" > "$tmp/input"
     awk -F '\t' '$6 != "-" { print $1, $6 }' "$tmp/rows" > "$tmp/expected"
-    "$replay" < "$tmp/input" > "$tmp/results"
+    "$replay" --bench < "$tmp/input" > "$tmp/results"
     cut -d' ' -f1,2 "$tmp/results" > "$tmp/actual"
     diff -u "$tmp/expected" "$tmp/actual"
-    "$replay" --busy < "$tmp/input" > "$tmp/filtered"
+    "$replay" --bench --busy < "$tmp/input" > "$tmp/filtered"
     diff -u "$tmp/results" "$tmp/filtered"
-    printf '%s: %d captures, %d packets\n' "$set_name" "$(wc -l < "$tmp/rows")" "$(wc -l < "$tmp/actual")"
+    bench=$(wc -l < "$tmp/actual")
+    # Outside bench mode the same captures yield every word except TEST.
+    # TEST words are DF2: their first byte is 0x10-0x17 (00010xxx).
+    awk '$2 !~ /^1[0-7]/' "$tmp/expected" > "$tmp/aircraft"
+    "$replay" < "$tmp/input" | cut -d' ' -f1,2 > "$tmp/actual"
+    diff -u "$tmp/aircraft" "$tmp/actual"
+    printf '%s: %d captures, %d packets in bench mode, %d without\n' "$set_name" "$(wc -l < "$tmp/rows")" "$bench" "$(wc -l < "$tmp/actual")"
 done
 
 # The illustrated position pair is also the plain-text example for replay.
